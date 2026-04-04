@@ -38,9 +38,12 @@ Tree-sitter parses each file into a syntax tree. We split only at
 function and class boundaries. Every chunk is a semantically complete
 unit. This is the most important decision for retrieval quality.
 
-**Class = one chunk. Methods inside are not split separately.**
-Recursion stops when a chunk node is found. This prevents
-double-counting — methods belong to their parent class chunk.
+**Class = one chunk. Methods inside are also chunked separately with parent_class set.**
+Recursion descends into class_definition nodes so methods are captured
+as individual chunks tagged with their enclosing class name (parent_class).
+Recursion still stops at function_definition nodes — nested functions
+belong to their parent chunk. parent_class enables disambiguation when
+multiple classes have identically named methods.
 
 **Module-level singleton for Parser and Tokenizer.**
 _PARSER and _TOKENIZER are module-level in chunker.py. Creating
@@ -53,11 +56,13 @@ because natural language queries map better to natural language
 descriptions than to raw syntax.
 
 **Metadata on every chunk.**
-Each chunk carries: file_path, node_type, name, source, start_line,
-end_line, token_count, calls (functions called), docstring.
+Each chunk carries: file_path, file_rel_path, node_type, name, source,
+start_line, end_line, token_count, calls (functions called), docstring,
+parent_class (enclosing class name for methods, None for top-level).
 calls is stored in ChromaDB as a comma-joined string because
 ChromaDB metadata must be primitive types. Split on read, join
-on write.
+on write. file_rel_path is stored relative to repo root for cleaner
+citations. parent_class enables disambiguation in re-ranking.
 
 **Incremental indexing via SHA-256 file hashing.**
 Every file gets a SHA-256 hash stored in ChromaDB alongside its
@@ -111,13 +116,11 @@ Hash IDs are: "{absolute_file_path}"
 | File | Status | Responsibility |
 |---|---|---|
 | repolens/walker.py | Complete | Filesystem traversal, file filtering |
-| repolens/chunker.py | Complete | AST parsing, chunk extraction, metadata |
-| repolens/store.py | Complete | Embeddings, ChromaDB storage, retrieval |
+| repolens/chunker.py | Complete | AST parsing, chunk extraction, metadata; parent_class tracking added |
+| repolens/store.py | Complete | Embeddings, ChromaDB storage, retrieval; index_repo, parent_class, file_rel_path added |
 | repolens/retriever.py | Complete | Hybrid search (vector + keyword), RRF, metadata re-ranking |
+| repolens/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing |
 | repolens/cli.py | Pending | Click CLI entry points |
-| repolens/llm.py | Pending | LLM call, prompt construction, citations |
-
-Note: llm.py does not exist yet. It will be created at Milestone 7.
 
 ---
 
@@ -129,6 +132,7 @@ Note: llm.py does not exist yet. It will be created at Milestone 7.
 | tests/test_chunker.py | 21 | Passing |
 | tests/test_store.py | 16 | Passing |
 | tests/test_retriever.py | 22 | Passing |
+| tests/test_llm.py | 20 | Passing |
 
 Run all tests: pytest tests/ -v
 
@@ -144,8 +148,8 @@ Run all tests: pytest tests/ -v
 | 4 | Embedding pipeline + vector store | Complete |
 | 5 | Basic retrieval | Complete |
 | 6 | Hybrid search + re-ranking | Complete |
-| 7 | LLM integration + citations | Next |
-| 8 | CLI | Pending |
+| 7 | LLM integration + citations | Complete |
+| 8 | CLI | Next |
 | 9 | FastAPI backend + React frontend | Pending |
 | 10 | Polish + ship | Pending |
 
