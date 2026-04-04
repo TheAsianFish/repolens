@@ -121,6 +121,8 @@ Hash IDs are: "{absolute_file_path}"
 | repolens/retriever.py | Complete | Hybrid search (vector + keyword), RRF, metadata re-ranking |
 | repolens/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing |
 | repolens/cli.py | Complete | Click CLI: index and query commands, progress bar, citations output |
+| repolens/api.py | Complete | FastAPI backend: POST /index, POST /query, GET /status, GET /health |
+| frontend/ | Complete | React + TypeScript UI: repo path input, query box, answer panel, chunk cards, citations |
 
 ---
 
@@ -134,6 +136,7 @@ Hash IDs are: "{absolute_file_path}"
 | tests/test_retriever.py | 22 | Passing |
 | tests/test_llm.py | 20 | Passing |
 | tests/test_cli.py | 7 | Passing |
+| tests/test_api.py | 9 | Passing |
 
 Run all tests: pytest tests/ -v
 
@@ -151,9 +154,8 @@ Run all tests: pytest tests/ -v
 | 6 | Hybrid search + re-ranking | Complete |
 | 7 | LLM integration + citations | Complete |
 | 8 | CLI | Complete |
-| 9 | FastAPI backend + React frontend | Next |
-| 9 | FastAPI backend + React frontend | Pending |
-| 10 | Polish + ship | Pending |
+| 9 | FastAPI backend + React frontend | Complete |
+| 10 | Polish + ship | Next |
 
 ---
 
