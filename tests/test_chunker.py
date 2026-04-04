@@ -232,3 +232,130 @@ class MyService:
 ''')
         chunks = chunk_file(f)
         assert chunks[0].docstring == "Handles core service logic."
+
+
+class TestChunkCompleteness:
+    """
+    Regression guard ensuring no function or class definition is silently
+    dropped by the chunker. Tests every case that could cause under-chunking:
+    decorated functions, decorated classes, decorated methods.
+
+    Because missing a chunk means the LLM never sees that code, we treat
+    any under-chunking as a critical bug. Over-chunking is acceptable.
+    """
+
+    def test_decorated_function_is_chunked(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+def decorator(fn):
+    return fn
+
+@decorator
+def foo():
+    return 1
+""")
+        chunks = chunk_file(f)
+        names = [c.name for c in chunks]
+        assert "foo" in names
+
+    def test_decorated_function_source_includes_decorator(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+def require_auth(fn):
+    return fn
+
+@require_auth
+def protected():
+    pass
+""")
+        chunks = chunk_file(f)
+        protected = next(c for c in chunks if c.name == "protected")
+        assert "@require_auth" in protected.source
+
+    def test_decorated_class_is_chunked(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+def singleton(cls):
+    return cls
+
+@singleton
+class Config:
+    pass
+""")
+        chunks = chunk_file(f)
+        names = [c.name for c in chunks]
+        assert "Config" in names
+
+    def test_decorated_class_source_includes_decorator(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+def singleton(cls):
+    return cls
+
+@singleton
+class Config:
+    pass
+""")
+        chunks = chunk_file(f)
+        config = next(c for c in chunks if c.name == "Config")
+        assert "@singleton" in config.source
+
+    def test_decorated_method_inside_class_is_chunked(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+class MyView:
+    @staticmethod
+    def render():
+        pass
+""")
+        chunks = chunk_file(f)
+        names = [c.name for c in chunks]
+        assert "render" in names
+
+    def test_decorated_method_source_includes_decorator(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+class MyView:
+    @staticmethod
+    def render():
+        pass
+""")
+        chunks = chunk_file(f)
+        render = next(c for c in chunks if c.name == "render")
+        assert "@staticmethod" in render.source
+
+    def test_decorated_method_has_correct_parent_class(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+class MyView:
+    @staticmethod
+    def render():
+        pass
+""")
+        chunks = chunk_file(f)
+        render = next(c for c in chunks if c.name == "render")
+        assert render.parent_class == "MyView"
+
+    def test_multiple_decorators_all_included_in_source(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+def dec_a(fn):
+    return fn
+
+def dec_b(fn):
+    return fn
+
+@dec_a
+@dec_b
+def multi():
+    pass
+""")
+        chunks = chunk_file(f)
+        multi = next(c for c in chunks if c.name == "multi")
+        assert "@dec_a" in multi.source
+        assert "@dec_b" in multi.source
+
+    def test_start_line_of_decorated_chunk_is_decorator_line(self, tmp_path):
+        f = write_py(tmp_path / "a.py", """\
+x = 1
+
+@property
+def value(self):
+    return self._value
+""")
+        chunks = chunk_file(f)
+        value = next(c for c in chunks if c.name == "value")
+        # @property is on line 3, not line 4 where `def` starts
+        assert value.start_line == 3
