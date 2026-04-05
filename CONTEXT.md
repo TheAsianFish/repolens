@@ -118,8 +118,8 @@ Hash IDs are: "{absolute_file_path}"
 | repolens/walker.py | Complete | Filesystem traversal, file filtering |
 | repolens/chunker.py | Complete | AST parsing, chunk extraction, metadata; parent_class tracking added |
 | repolens/store.py | Complete | Embeddings, ChromaDB storage, retrieval; index_repo, parent_class, file_rel_path added |
-| repolens/retriever.py | Complete | Hybrid search (vector + keyword), RRF, metadata re-ranking |
-| repolens/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing |
+| repolens/retriever.py | Complete | Hybrid search (vector + keyword), RRF, call graph expansion, metadata re-ranking |
+| repolens/llm.py | Complete | Prompt construction, tightened system prompt, gpt-5.4-mini call, citation parsing |
 | repolens/cli.py | Complete | Click CLI: index and query commands, progress bar, citations output |
 | repolens/api.py | Complete | FastAPI backend: POST /index, POST /query, GET /status, GET /health |
 | frontend/ | Complete | React + TypeScript UI: repo path input, query box, answer panel, chunk cards, citations |
@@ -155,7 +155,10 @@ Run all tests: pytest tests/ -v
 | 7 | LLM integration + citations | Complete |
 | 8 | CLI | Complete |
 | 9 | FastAPI backend + React frontend | Complete |
-| 10 | Polish + ship | Next |
+| 10 | Polish + ship | Complete |
+
+**V1 shipped.** All milestones complete. Public README published.
+Re-index self-test: 17 files, 192 chunks. 116 tests passing.
 
 ---
 
