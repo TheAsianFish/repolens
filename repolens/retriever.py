@@ -34,14 +34,14 @@ RRF_K = 60
 def retrieve(
     query: str,
     store_path: str | Path,
-    openai_client: OpenAI,
+    openai_client,
 ) -> list[dict]:
     """
     Run the full hybrid retrieval pipeline for a plain English query.
 
     Combines vector similarity search and keyword search via RRF,
-    then applies metadata re-ranking, and returns the top RETURN_N
-    results.
+    applies metadata re-ranking, then expands via call graph to
+    capture implementation functions that vector search misses.
 
     Args:
         query: Plain English question from the user.
@@ -49,12 +49,11 @@ def retrieve(
         openai_client: Initialized OpenAI client.
 
     Returns:
-        List of up to RETURN_N result dicts sorted by final score,
-        each containing: source, file_path, name, node_type,
+        List of up to RETURN_N + expansion results sorted by score.
+        Each result contains: source, file_path, name, node_type,
         start_line, end_line, calls, docstring, distance,
         rrf_score, rerank_score.
     """
-    # Step 1: vector search — semantic similarity
     vector_results = query_chunks(
         query_text=query,
         store_path=store_path,
@@ -62,7 +61,6 @@ def retrieve(
         n_results=RETRIEVE_N,
     )
 
-    # Step 2: keyword search — exact token matching
     keyword_results = keyword_search(
         query=query,
         store_path=store_path,
@@ -72,13 +70,16 @@ def retrieve(
     if not vector_results and not keyword_results:
         return []
 
-    # Step 3: merge via RRF
     merged = reciprocal_rank_fusion(vector_results, keyword_results)
-
-    # Step 4: metadata re-ranking on top of RRF scores
     ranked = rerank(query, merged)
+    top = ranked[:RETURN_N]
 
-    return ranked[:RETURN_N]
+    # Expand via call graph to capture called functions that ranked
+    # too low during vector search. This pulls _walk_tree into
+    # results when chunk_file is retrieved and calls it.
+    expanded = expand_via_call_graph(top, store_path, openai_client)
+
+    return expanded
 
 
 def reciprocal_rank_fusion(
@@ -188,6 +189,70 @@ def rerank(query: str, results: list[dict]) -> list[dict]:
         scored.append({**result, "rerank_score": base_score + boost})
 
     return sorted(scored, key=lambda r: r["rerank_score"], reverse=True)
+
+
+def expand_via_call_graph(
+    results: list[dict],
+    store_path: str | Path,
+    openai_client,
+    max_expansion: int = 3,
+) -> list[dict]:
+    """
+    Expand retrieved results by fetching chunks for functions that
+    are called by already-retrieved chunks.
+
+    When chunk_file is retrieved and its calls list contains
+    _walk_tree, this function fetches _walk_tree's chunk and adds
+    it to the results if not already present. This closes the gap
+    where implementation details live in called functions that
+    vector search did not rank highly enough.
+
+    Args:
+        results: Current list of retrieved and ranked result dicts.
+        store_path: ChromaDB store path.
+        openai_client: OpenAI client (passed for interface consistency,
+            not used directly — keyword_search is call-free).
+        max_expansion: Maximum number of additional chunks to add.
+
+    Returns:
+        Expanded results list with called chunks appended.
+        Original order is preserved — expansions go at the end.
+    """
+    existing_names = {r["name"] for r in results}
+    expansions: list[dict] = []
+
+    for result in results:
+        if len(expansions) >= max_expansion:
+            break
+
+        for called_name in result.get("calls", []):
+            if called_name in existing_names:
+                continue
+            if len(expansions) >= max_expansion:
+                break
+
+            # Search for the called function by exact name.
+            # keyword_search does substring matching so we verify
+            # the name matches exactly before accepting the result.
+            matches = keyword_search(
+                query=called_name,
+                store_path=store_path,
+                n_results=3,
+            )
+
+            for match in matches:
+                if match["name"] == called_name:
+                    # Low score so expansions never displace primary
+                    # results — they always appear at the end.
+                    expansions.append({
+                        **match,
+                        "rrf_score": 0.005,
+                        "rerank_score": 0.005,
+                    })
+                    existing_names.add(called_name)
+                    break
+
+    return results + expansions
 
 
 def format_results(results: list[dict]) -> str:
