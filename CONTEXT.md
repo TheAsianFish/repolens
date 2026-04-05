@@ -24,7 +24,7 @@ Free and open source. Built for developer tooling.
 | Embeddings | text-embedding-3-small | Cheap, high quality, 1536 dims |
 | Vector store | ChromaDB (persistent, in-process) | Local-first, no server needed |
 | LLM | gpt-5.4-mini | Fast, cheap, strong instruction following |
-| Web server | FastAPI | Async, simple, well-documented |
+| Web server | FastAPI | Async, simple, automatic validation |
 | Frontend | React + TypeScript | Simple local UI at localhost:3000 |
 | CLI | Click | Python CLI standard |
 | Install | pip install repolens | One command |
@@ -38,12 +38,12 @@ Tree-sitter parses each file into a syntax tree. We split only at
 function and class boundaries. Every chunk is a semantically complete
 unit. This is the most important decision for retrieval quality.
 
-**Class = one chunk. Methods inside are also chunked separately with parent_class set.**
-Recursion descends into class_definition nodes so methods are captured
-as individual chunks tagged with their enclosing class name (parent_class).
-Recursion still stops at function_definition nodes — nested functions
-belong to their parent chunk. parent_class enables disambiguation when
-multiple classes have identically named methods.
+**Class = one chunk. Methods chunked separately with parent_class.**
+_walk_tree descends into class bodies so methods are chunked
+individually with parent_class set to the enclosing class name.
+This enables disambiguation between similarly named methods on
+different classes. Example: AuthService.validate and
+UserService.validate are distinct chunks with distinct parent_class.
 
 **Module-level singleton for Parser and Tokenizer.**
 _PARSER and _TOKENIZER are module-level in chunker.py. Creating
@@ -56,31 +56,46 @@ because natural language queries map better to natural language
 descriptions than to raw syntax.
 
 **Metadata on every chunk.**
-Each chunk carries: file_path, file_rel_path, node_type, name, source,
-start_line, end_line, token_count, calls (functions called), docstring,
-parent_class (enclosing class name for methods, None for top-level).
+Each chunk carries: file_path, file_rel_path, node_type, name,
+source, start_line, end_line, token_count, calls, docstring,
+parent_class.
 calls is stored in ChromaDB as a comma-joined string because
 ChromaDB metadata must be primitive types. Split on read, join
-on write. file_rel_path is stored relative to repo root for cleaner
-citations. parent_class enables disambiguation in re-ranking.
+on write. parent_class and docstring stored as empty string when
+None — ChromaDB does not accept None metadata values.
 
 **Incremental indexing via SHA-256 file hashing.**
 Every file gets a SHA-256 hash stored in ChromaDB alongside its
 chunks. Re-indexing skips files whose hash has not changed.
 Only changed files are re-embedded and re-stored.
 
-**Hybrid search: vector similarity + keyword search, merged.**
+**Hybrid search: vector similarity + keyword search, merged via RRF.**
 Pure vector search misses exact name matches. Pure keyword search
-misses semantic similarity. We do both and merge results.
+misses semantic similarity. We do both and merge results using
+Reciprocal Rank Fusion (k=60). RRF operates on rank positions not
+raw scores, sidestepping the normalization problem entirely.
+
+**Call graph expansion after retrieval.**
+After retrieving and ranking top N chunks, we inspect each chunk's
+calls list and fetch any called functions not already in results
+using exact keyword_search by name. Expansions get rerank_score=0.005
+so they never displace primary results — they appear at the end.
+This pulls _walk_tree into context when chunk_file is retrieved.
+Max 3 expansions per query to avoid context overflow.
 
 **Metadata re-ranking as a second pass.**
 Top 10 chunks retrieved. Re-ranked using metadata signals:
-file name relevance, function name match, call graph proximity.
-Top 5 sent to LLM.
+  +0.3 if query token appears in chunk name
+  +0.2 if query token appears in file path stem
+  +0.15 if query token appears in docstring
+  +0.1 per query token appearing in calls list
+Base score is rrf_score. Final score is base + boost.
+Top 5 sent to LLM after expansion appended.
 
 **Top 5 chunks max sent to LLM.**
 Hard cap. 5 chunks * 300 tokens = 1500 tokens max context.
 Safe for gpt-5.4-mini. Prevents context overflow.
+Call graph expansions are appended after top 5, up to 3 additional.
 
 **Chunk token cap: 300 tokens.**
 Hard cap enforced in chunker.py using tiktoken cl100k_base
@@ -92,6 +107,18 @@ Tree-sitter uses 0-indexed rows (C convention). We add 1 on
 every start_point and end_point extraction. All citations the
 user sees are 1-indexed.
 
+**Citations use relative paths.**
+file_rel_path is computed at index time relative to repo root
+and stored as metadata. All citation output uses file_rel_path
+not file_path to avoid exposing absolute paths like
+/Users/patrick/Desktop/... in user-facing output.
+
+**LLM prompt instructs synthesis across all chunks.**
+System prompt explicitly tells the LLM to use ALL provided chunks,
+not just the most relevant one, and to never claim it lacks
+information if any chunk is partially relevant. Temperature=0.1
+for consistent structured output.
+
 ---
 
 ## ChromaDB collections
@@ -101,13 +128,11 @@ user sees are 1-indexed.
 | repolens_chunks | Stores chunk source, embeddings, metadata |
 | repolens_hashes | Stores one hash per file for incremental indexing |
 
-ChromaDB persists to .repolens/ in the project root.
+ChromaDB persists to .repolens/ inside the indexed repo root.
 .repolens/ is gitignored.
 
-Chunk IDs are: "{absolute_file_path}:{start_line}"
-This makes IDs deterministic and stable across re-index runs.
-
-Hash IDs are: "{absolute_file_path}"
+Chunk IDs: "{absolute_file_path}:{start_line}"
+Hash IDs: "{absolute_file_path}"
 
 ---
 
@@ -116,13 +141,13 @@ Hash IDs are: "{absolute_file_path}"
 | File | Status | Responsibility |
 |---|---|---|
 | repolens/walker.py | Complete | Filesystem traversal, file filtering |
-| repolens/chunker.py | Complete | AST parsing, chunk extraction, metadata; parent_class tracking added |
-| repolens/store.py | Complete | Embeddings, ChromaDB storage, retrieval; index_repo, parent_class, file_rel_path added |
-| repolens/retriever.py | Complete | Hybrid search (vector + keyword), RRF, call graph expansion, metadata re-ranking |
-| repolens/llm.py | Complete | Prompt construction, tightened system prompt, gpt-5.4-mini call, citation parsing |
-| repolens/cli.py | Complete | Click CLI: index and query commands, progress bar, citations output |
-| repolens/api.py | Complete | FastAPI backend: POST /index, POST /query, GET /status, GET /health |
-| frontend/ | Complete | React + TypeScript UI: repo path input, query box, answer panel, chunk cards, citations |
+| repolens/chunker.py | Complete | AST parsing, chunk + metadata extraction, parent_class tracking |
+| repolens/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator |
+| repolens/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion |
+| repolens/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing |
+| repolens/cli.py | Complete | Click CLI — index and query commands |
+| repolens/api.py | Complete | FastAPI backend — /index, /query, /status, /health |
+| frontend/src/ | Complete | React + TypeScript UI at localhost:3000 |
 
 ---
 
@@ -134,11 +159,14 @@ Hash IDs are: "{absolute_file_path}"
 | tests/test_chunker.py | 21 | Passing |
 | tests/test_store.py | 16 | Passing |
 | tests/test_retriever.py | 22 | Passing |
-| tests/test_llm.py | 20 | Passing |
+| tests/test_llm.py | 14 | Passing |
 | tests/test_cli.py | 7 | Passing |
 | tests/test_api.py | 9 | Passing |
 
 Run all tests: pytest tests/ -v
+
+Note: test counts above are approximate. Always trust the actual
+pytest output over this table.
 
 ---
 
@@ -157,71 +185,89 @@ Run all tests: pytest tests/ -v
 | 9 | FastAPI backend + React frontend | Complete |
 | 10 | Polish + ship | Complete |
 
-**V1 shipped.** All milestones complete. Public README published.
-Re-index self-test: 17 files, 192 chunks. 116 tests passing.
+V1 shipped. Next work begins on V2.
+
+---
+
+## V2 Roadmap
+
+- TypeScript / JavaScript support (Tree-sitter parser swap)
+- VS Code extension wrapper
+- Dependency graph visualization
+- "Start here" guide auto-generated for new engineers
+
+## V3 Roadmap
+
+- GitHub webhook integration (re-index on push)
+- Multi-repo support
+- Slack bot
 
 ---
 
 ## Conventions
 
 - All file paths stored and compared as absolute resolved strings.
-- Sorted output everywhere — walker, chunker, call lists — for
-  deterministic behavior across runs.
+- Citations and user-facing output always use file_rel_path.
+- Sorted output everywhere for deterministic behavior across runs.
 - Tests are hermetic. Every test uses tmp_path. No test touches
   a real repository on disk.
 - OpenAI calls are always mocked in tests. Never hit the network
   in a test.
-- New modules get a stub first, implementation second, tests third.
-- Run pytest after every milestone before moving forward.
-- Update CONTEXT.md at the end of every milestone. A milestone is
-  not done until CONTEXT.md reflects it.
+- Run pytest after every change before committing.
+- Update CONTEXT.md at the end of every milestone or significant
+  change. A milestone is not done until CONTEXT.md reflects it.
 
 ---
 
 ## Git commit conventions
 
-Commit to GitHub after every meaningful unit of work. A meaningful
-unit is any of the following:
-- A complete prompt execution (new module, new test file, refactor)
+Commit to GitHub after every meaningful unit of work including:
+- A complete prompt execution
 - A passing test suite for a new feature
 - Any fix to a failing test
-- Any update to CONTEXT.md itself
-- Any architectural change, even if small
+- Any update to CONTEXT.md
+- Any architectural change
 
-Commit message format: use conventional commits.
-  feat: add incremental indexing via SHA-256 hashing
-  fix: correct 0-indexed line number offset in chunker
-  refactor: make Parser and Tokenizer module-level singletons
-  test: add metadata extraction tests to test_chunker
-  docs: update CONTEXT.md for Milestone 4 completion
-  chore: update pyproject.toml with dev dependencies
+Format: conventional commits
+  feat: add call graph expansion to retriever
+  fix: use file_rel_path in citation output
+  refactor: make Parser singleton at module level
+  test: add expansion tests to test_retriever
+  docs: update CONTEXT.md for Milestone 10
+  chore: add httpx to dev dependencies
 
 Rules:
-- One logical change per commit. Do not bundle unrelated changes.
+- One logical change per commit.
 - Never commit with a vague message like "update" or "fix stuff".
-- Always run pytest tests/ -v before committing. Green tests only.
-- Always run git status before git add to verify .env is absent.
-- Never use git add . blindly — use git add <specific files>.
-- Never push automatically. Always wait for explicit instruction to push.
+- Always run pytest tests/ -v before committing. Green only.
+- Always run git status before git add. Verify .env is absent.
+- Never use git add . — use git add <specific files>.
+- Push to main after every commit.
 
-Sequence for every commit:
+Sequence:
   pytest tests/ -v
   git status
-  git add <specific files changed>
+  git add <specific files>
   git commit -m "type: description"
+  git push origin main
 
 ---
 
 ## What not to do
 
-- Do not split classes into separate method chunks.
+- Do not split classes into separate method chunks without setting
+  parent_class on each method.
 - Do not use dirs = [...] in os.walk — use dirs[:] = [...].
 - Do not store lists directly in ChromaDB metadata.
 - Do not create a Parser or Tokenizer instance per file call.
 - Do not embed raw source without enrichment.
 - Do not skip the hash check on re-index unless force=True.
-- Do not send more than 5 chunks to the LLM.
+- Do not send more than 5 primary chunks to the LLM.
 - Do not use 0-indexed line numbers in any user-facing output.
 - Do not commit with .env present in git status output.
 - Do not bundle unrelated changes into one commit.
 - Do not leave CONTEXT.md outdated after a milestone completes.
+- Do not use file_path in user-facing citation output — always
+  use file_rel_path.
+- Do not say the LLM lacks information if any chunk is relevant —
+  the system prompt explicitly instructs synthesis across all chunks.

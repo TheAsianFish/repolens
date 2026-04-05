@@ -113,6 +113,9 @@ bash start.sh
 | Re-index after small change | ~$0.001 (changed files only) |
 | Each query | ~$0.001 |
 
+Incremental indexing means re-indexing after a small change costs
+almost nothing — only changed files are re-embedded.
+
 ---
 
 ## Stack
@@ -143,6 +146,15 @@ bash start.sh
 **V2** — TypeScript support, VS Code extension, dependency graph
 
 **V3** — GitHub webhook re-indexing, multi-repo, Slack bot
+
+---
+
+## Contributing
+
+Bug reports and pull requests are welcome. Please open an issue
+before submitting a large change so we can discuss the approach.
+
+See .github/ISSUE_TEMPLATE/bug_report.md for the bug report format.
 
 ---
 
