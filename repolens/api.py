@@ -16,14 +16,18 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
 from openai import OpenAI
 from pydantic import BaseModel
+from starlette.staticfiles import StaticFiles
 
 from repolens.store import index_repo
 from repolens.retriever import retrieve
 from repolens.llm import answer_query
 
 load_dotenv()
+
+DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 
 app = FastAPI(
     title="repolens",
@@ -236,3 +240,31 @@ async def status_endpoint(repo_path: str):
 async def health():
     """Health check endpoint. Returns 200 if the server is running."""
     return {"status": "ok", "version": "0.1.0"}
+
+
+# ── SPA catch-all ─────────────────────────────────────────────────────────────
+# Must come AFTER all API routes so /index, /query, /status, /health are matched
+# first. Serves the requested file if it exists in frontend/dist (JS, CSS,
+# assets), otherwise returns index.html so React Router handles client-side
+# routing for deep-link paths like /dashboard or /profile.
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_spa(full_path: str):
+    target = DIST_DIR / full_path
+    if target.is_file():
+        return FileResponse(str(target))
+    index_html = DIST_DIR / "index.html"
+    if not index_html.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="Frontend not built. Run: cd frontend && npm run build",
+        )
+    return HTMLResponse(index_html.read_text())
+
+
+# Mount static files after all routes. Routes take precedence in FastAPI's
+# routing table, so all API paths and the catch-all above are matched first.
+# The mount provides explicit static-file serving infrastructure and is used
+# when the catch-all delegates to FileResponse for direct asset paths.
+if DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(DIST_DIR), html=True), name="static")
