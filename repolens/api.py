@@ -27,7 +27,12 @@ from repolens.llm import answer_query
 
 load_dotenv()
 
-DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
+# When installed via pip, the pre-built React bundle is copied into the
+# repolens package directory (repolens/dist/) before building the wheel.
+# In development, fall back to the Vite output at frontend/dist/.
+_PKG_DIST = Path(__file__).parent / "dist"
+_DEV_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+DIST_DIR = _PKG_DIST if _PKG_DIST.exists() else _DEV_DIST
 
 app = FastAPI(
     title="repolens",
