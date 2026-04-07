@@ -1,10 +1,10 @@
-# codecompass
+# codesight
 
 **Ask plain English questions about any Python codebase. Get answers
 with exact file and line citations. Runs entirely on your machine.**
 ```bash
-codecompass index ./myrepo
-codecompass query "how does authentication work"
+codesight index ./myrepo
+codesight query "how does authentication work"
 ```
 Searching...
 Generating answer...
@@ -16,21 +16,21 @@ session via SessionService.create() [2].
 [1] auth/validators.py:14-28    (validate_token)
 [2] auth/session.py:45-67       (SessionService.create)
 
-[confidence: high · 5 chunks · index: ./myrepo/.codecompass]
+[confidence: high · 5 chunks · index: ./myrepo/.codesight]
 
 Your code never leaves your machine. No server. No accounts beyond
 an OpenAI API key.
 
 ---
 
-## Why codecompass
+## Why codesight
 
 Getting dropped into an unfamiliar codebase is painful. Documentation
 is outdated. Grep finds strings, not meaning. LLM chatbots hallucinate
 file names and function signatures because they have no access to your
 actual code.
 
-codecompass indexes your code locally using AST-based chunking — every
+codesight indexes your code locally using AST-based chunking — every
 retrieved chunk is a complete function or class, never an arbitrary
 line slice. It runs entirely on your machine.
 
@@ -39,7 +39,7 @@ line slice. It runs entirely on your machine.
 ## How it works
 
 **1. AST chunking**
-Tree-sitter parses each file into a syntax tree. codecompass splits only
+Tree-sitter parses each file into a syntax tree. codesight splits only
 at function and class boundaries. Every chunk is semantically complete.
 Methods are tracked with their parent class for disambiguation.
 
@@ -50,7 +50,7 @@ Reciprocal Rank Fusion — a ranking algorithm that rewards consistency
 across search methods over dominance in just one.
 
 **3. Call graph expansion**
-After initial retrieval, codecompass inspects each retrieved chunk's
+After initial retrieval, codesight inspects each retrieved chunk's
 call graph and fetches called functions that did not rank highly
 enough on their own. This surfaces implementation details that live
 one function call away from the entry point.
@@ -78,7 +78,7 @@ file paths and line numbers.
 
 ### Install from PyPI
 ```bash
-pip install codecompass
+pip install codesight
 ```
 
 Set your API key:
@@ -89,8 +89,8 @@ export OPENAI_API_KEY=sk-your-key-here
 
 ### Install from source (development)
 ```bash
-git clone https://github.com/TheAsianFish/codecompass
-cd codecompass
+git clone https://github.com/TheAsianFish/codesight
+cd codesight
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
@@ -101,22 +101,22 @@ cp .env.example .env
 ### CLI
 ```bash
 # Index a repository (~$0.02 per 30k lines, one-time)
-codecompass index ./path/to/repo
+codesight index ./path/to/repo
 
 # Ask a question
-codecompass query "how does authentication work"
+codesight query "how does authentication work"
 
 # See raw retrieved chunks without an LLM call
-codecompass query "where is UserService defined" --no-llm
+codesight query "where is UserService defined" --no-llm
 
 # Force re-index all files after a major refactor
-codecompass index ./path/to/repo --force
+codesight index ./path/to/repo --force
 ```
 
 ### Web UI
 ```bash
 # Start the server (the React UI is bundled — no npm needed)
-uvicorn codecompass.api:app --port 8000
+uvicorn codesight.api:app --port 8000
 # Open http://localhost:8000
 ```
 

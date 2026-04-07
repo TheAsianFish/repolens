@@ -1,5 +1,5 @@
 """
-Tests for codecompass/walker.py.
+Tests for codesight/walker.py.
 
 All tests use pytest's tmp_path fixture to create hermetic temporary
 directory structures. No test touches any real repository on disk.
@@ -7,7 +7,7 @@ directory structures. No test touches any real repository on disk.
 
 import pytest
 from pathlib import Path
-from codecompass.walker import walk_repo, MAX_FILE_SIZE_BYTES
+from codesight.walker import walk_repo, MAX_FILE_SIZE_BYTES
 
 
 def write_file(path: Path, content: str = "# placeholder") -> None:

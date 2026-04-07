@@ -3,7 +3,7 @@ requires = ["setuptools>=68,<77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codecompass"
+name = "codesight"
 version = "0.1.0"
 description = "Local-first codebase context engine — ask plain English questions about any Python codebase"
 readme = "README.md"
@@ -44,11 +44,11 @@ dev = [
 ]
 
 [project.scripts]
-codecompass = "codecompass.cli:main"
+codesight = "codesight.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/TheAsianFish/codecompass"
-Issues = "https://github.com/TheAsianFish/codecompass/issues"
+Homepage = "https://github.com/TheAsianFish/codesight"
+Issues = "https://github.com/TheAsianFish/codesight/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -56,10 +56,10 @@ exclude = ["tests*", "build*"]
 
 # Ship the pre-built React bundle with the package so the FastAPI server
 # can serve the SPA without Node.js being installed on the user's machine.
-# The dist files are copied from frontend/dist into codecompass/dist before
+# The dist files are copied from frontend/dist into codesight/dist before
 # running python -m build (see build instructions in README).
 [tool.setuptools.package-data]
-codecompass = ["dist/**/*", "dist/*"]
+codesight = ["dist/**/*", "dist/*"]
 
 [tool.ruff]
 line-length = 88

@@ -12,6 +12,6 @@ about: Something is not working correctly
 **Environment**
 - OS:
 - Python version:
-- codecompass version:
+- codesight version:
 
 **Error output**

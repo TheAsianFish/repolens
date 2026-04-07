@@ -1,15 +1,15 @@
 """
 cli.py
 
-Click-based command line interface for codecompass.
+Click-based command line interface for codesight.
 
 Commands:
-  codecompass index <repo_path>   — index a repository
-  codecompass query <question>    — query an indexed repository
+  codesight index <repo_path>   — index a repository
+  codesight query <question>    — query an indexed repository
 
-The store directory defaults to .codecompass/ inside the repo being
+The store directory defaults to .codesight/ inside the repo being
 indexed. This keeps the index co-located with the repo it describes
-and makes cleanup obvious — delete .codecompass/ to reset the index.
+and makes cleanup obvious — delete .codesight/ to reset the index.
 """
 
 import os
@@ -20,9 +20,9 @@ import click
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from codecompass.store import index_repo
-from codecompass.retriever import retrieve, format_results
-from codecompass.llm import answer_query
+from codesight.store import index_repo
+from codesight.retriever import retrieve, format_results
+from codesight.llm import answer_query
 
 # Load .env file if present. This must happen before any os.getenv
 # calls. load_dotenv is a no-op if .env does not exist, so it is
@@ -70,22 +70,22 @@ def resolve_store_path(repo_path: Path, store: str | None) -> Path:
     Resolve the ChromaDB store directory.
 
     If --store is provided, use that path. Otherwise default to
-    .codecompass/ inside the repo being indexed. The directory is
+    .codesight/ inside the repo being indexed. The directory is
     created if it does not exist.
     """
     if store:
         store_path = Path(store).resolve()
     else:
-        store_path = repo_path / ".codecompass"
+        store_path = repo_path / ".codesight"
     store_path.mkdir(parents=True, exist_ok=True)
     return store_path
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="codecompass")
+@click.version_option(version="0.1.0", prog_name="codesight")
 def main():
     """
-    codecompass — local-first codebase context engine.
+    codesight — local-first codebase context engine.
 
     Point it at any Python repo, ask plain English questions,
     get back answers with exact file and line citations.
@@ -97,7 +97,7 @@ def main():
 @click.option(
     "--store",
     default=None,
-    help="Path to ChromaDB store directory. Defaults to <repo>/.codecompass/",
+    help="Path to ChromaDB store directory. Defaults to <repo>/.codesight/",
 )
 @click.option(
     "--force",
@@ -112,9 +112,9 @@ def index(repo_path: str, store: str | None, force: bool):
     REPO_PATH is the path to the repository root to index.
 
     Example:
-      codecompass index ./myrepo
-      codecompass index ./myrepo --force
-      codecompass index ./myrepo --store /tmp/myrepo-index
+      codesight index ./myrepo
+      codesight index ./myrepo --force
+      codesight index ./myrepo --store /tmp/myrepo-index
     """
     repo = Path(repo_path).resolve()
     client = get_openai_client()
@@ -179,7 +179,7 @@ def index(repo_path: str, store: str | None, force: bool):
 @click.option(
     "--store",
     default=None,
-    help="Path to ChromaDB store directory. Defaults to <repo>/.codecompass/",
+    help="Path to ChromaDB store directory. Defaults to <repo>/.codesight/",
 )
 @click.option(
     "--no-llm",
@@ -200,9 +200,9 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
     QUESTION is your plain English question about the codebase.
 
     Examples:
-      codecompass query "how does authentication work"
-      codecompass query "where is the database connection set up"
-      codecompass query "what does UserService do" --no-llm
+      codesight query "how does authentication work"
+      codesight query "where is the database connection set up"
+      codesight query "what does UserService do" --no-llm
     """
     repo_path = Path(repo).resolve()
     client = get_openai_client()
@@ -211,7 +211,7 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
     if not (store_path / "chroma.sqlite3").exists():
         raise click.ClickException(
             f"No index found at {store_path}. "
-            f"Run: codecompass index {repo_path}"
+            f"Run: codesight index {repo_path}"
         )
 
     click.echo(f"Query:  {question}")

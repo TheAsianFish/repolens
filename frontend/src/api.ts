@@ -1,4 +1,4 @@
-// Type-safe wrappers around the codecompass FastAPI backend.
+// Type-safe wrappers around the codesight FastAPI backend.
 // All functions throw on non-200 responses.
 
 const BASE_URL = 'http://localhost:8000'
