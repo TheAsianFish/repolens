@@ -25,7 +25,7 @@ Free and open source. Built for developer tooling.
 | Vector store | ChromaDB (persistent, in-process) | Local-first, no server needed |
 | LLM | gpt-5.4-mini | Fast, cheap, strong instruction following |
 | Web server | FastAPI | Async, simple, automatic validation |
-| Frontend | React + TypeScript | Simple local UI at localhost:3000 |
+| Frontend | React + TypeScript | SPA served by FastAPI from frontend/dist; dev via Vite at localhost:3000 |
 | CLI | Click | Python CLI standard |
 | Install | pip install repolens | One command |
 
@@ -146,6 +146,19 @@ The CLI prints "Searching..." before retrieval and "Generating
 answer..." before the LLM call. A 2-step progress bar was not a
 real progress indicator and mislabeled the LLM step as "Retrieving".
 
+**FastAPI serves the built React SPA as static files.**
+api.py mounts frontend/dist at "/" after all API routes. A catch-all
+GET /{full_path:path} route returns the requested file if it exists
+in dist (JS, CSS, assets), otherwise returns index.html so React
+Router handles client-side routing. Routes registered with @app.get()
+take precedence over app.mount() in FastAPI's routing table, so all
+API endpoints (/index, /query, /status, /health) are always matched
+first. The mount is conditional on frontend/dist existing so the
+server starts cleanly without a prior npm run build.
+Development still uses bash start.sh (Vite dev server + backend).
+The static file serving is for distribution: pip-installed users
+have no Node.js runtime dependency.
+
 ---
 
 ## ChromaDB collections
@@ -173,8 +186,9 @@ Hash IDs: "{absolute_file_path}"
 | repolens/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion |
 | repolens/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing, CITATIONS block stripping |
 | repolens/cli.py | Complete | Click CLI — index and query commands, confidence label |
-| repolens/api.py | Complete | FastAPI backend — /index, /query, /status, /health |
-| frontend/src/ | Complete | React + TypeScript UI at localhost:3000 |
+| repolens/api.py | Complete | FastAPI backend — /index, /query, /status, /health; serves built SPA from frontend/dist |
+| frontend/src/ | Complete | React + TypeScript SPA; Vite dev server for development; built output served by FastAPI |
+| tests/conftest.py | Complete | Creates minimal frontend/dist stub before TestClient initialises |
 
 Note: repolens/embedder.py was deleted. It was an unimplemented stub;
 the embedding logic lives in store.py as _embed_texts and build_embed_text.
@@ -235,6 +249,9 @@ These were identified after V1 ship and resolved before V2 work begins.
 | Fix mock_openai_client to return N embeddings per N inputs | test_store.py | e140622 |
 | Replace chunks-used footer with confidence label | cli.py, test_cli.py | cf015c8 |
 | Replace fake 2-step progress bar with status messages | cli.py | a154c10 |
+|| Disable noUnusedLocals/noUnusedParameters to unblock npm run build | frontend/tsconfig.json | 338c1e4 |
+|| Serve built React SPA from FastAPI; catch-all route for client-side routing | repolens/api.py | 12a2ddd |
+|| Add conftest.py to create minimal frontend/dist stub before TestClient initialises | tests/conftest.py | c1d1e69 |
 
 ---
 
@@ -282,7 +299,7 @@ Commit to GitHub after every meaningful unit of work including:
 - Any update to CONTEXT.md
 - Any architectural change
 
-Format: conventional commits
+Format: conventional commits — ONE LINE ONLY, no body, no bullet points.
   feat: add call graph expansion to retriever
   fix: use file_rel_path in citation output
   refactor: make Parser singleton at module level
@@ -290,8 +307,12 @@ Format: conventional commits
   docs: update CONTEXT.md for Milestone 11
   chore: add httpx to dev dependencies
 
+Semicolons are allowed to join related items on the same line:
+  feat: serve React SPA from FastAPI; add catch-all route for client-side routing
+
 Rules:
 - One logical change per commit.
+- Commit message is exactly one line. No multi-line messages, no -m body flags.
 - Never commit with a vague message like "update" or "fix stuff".
 - Always run pytest tests/ -v before committing. Green only.
 - Always run git status before git add. Verify .env is absent.
@@ -331,3 +352,8 @@ Sequence:
   guard is len >= 2 to preserve 2-character identifiers like os, db.
 - Do not print the LLM's raw response as the answer — strip the
   CITATIONS block first via _strip_citations_block.
+- Do not write multi-line git commit messages — one line only; use
+  semicolons to join related items if needed.
+- Do not add a catch-all GET route before the StaticFiles mount without
+  making it file-aware — a plain index.html catch-all will serve HTML
+  for JS/CSS requests and break the frontend.
