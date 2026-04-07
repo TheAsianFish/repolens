@@ -71,16 +71,29 @@ file paths and line numbers.
 ### Requirements
 
 - Python 3.11+
-- Node.js 18+ (web UI only)
 - OpenAI API key ([get one here](https://platform.openai.com/api-keys))
 
-### Install
+> Node.js is **not required** for end users. The web UI is bundled
+> inside the package and served directly by FastAPI.
+
+### Install from PyPI
 ```bash
-git clone https://github.com/YOUR_USERNAME/repolens
+pip install repolens
+```
+
+Set your API key:
+```bash
+export OPENAI_API_KEY=sk-your-key-here
+# or add it to a .env file in your working directory
+```
+
+### Install from source (development)
+```bash
+git clone https://github.com/TheAsianFish/repolens
 cd repolens
 python -m venv .venv
 source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e .
+pip install -e ".[dev]"
 cp .env.example .env
 # Edit .env and add your OPENAI_API_KEY
 ```
@@ -102,9 +115,17 @@ repolens index ./path/to/repo --force
 
 ### Web UI
 ```bash
+# Start the server (the React UI is bundled — no npm needed)
+uvicorn repolens.api:app --port 8000
+# Open http://localhost:8000
+```
+
+**For frontend development** (hot reload via Vite):
+```bash
+# Requires Node.js 18+
 cd frontend && npm install && cd ..
 bash start.sh
-# Open http://localhost:3000
+# Backend: http://localhost:8000  Frontend: http://localhost:3000
 ```
 
 ---
