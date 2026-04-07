@@ -3,6 +3,23 @@
 
 const BASE_URL = 'http://localhost:8000'
 
+/** Prefer FastAPI's `detail` field over raw JSON for UI messages. */
+export async function httpErrorMessage(res: Response): Promise<string> {
+  const text = await res.text()
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown }
+    if (typeof parsed.detail === 'string') return parsed.detail
+    if (Array.isArray(parsed.detail)) {
+      return parsed.detail
+        .map((e: { msg?: string }) => e.msg ?? JSON.stringify(e))
+        .join('; ')
+    }
+  } catch {
+    /* not JSON */
+  }
+  return text || `${res.status} ${res.statusText}`
+}
+
 export interface Citation {
   label: string
   file_rel_path: string
@@ -47,7 +64,7 @@ export async function checkStatus(repoPath: string): Promise<StatusResponse> {
   const res = await fetch(
     `${BASE_URL}/status?repo_path=${encodeURIComponent(repoPath)}`
   )
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) throw new Error(await httpErrorMessage(res))
   return res.json()
 }
 
@@ -60,7 +77,7 @@ export async function indexRepo(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ repo_path: repoPath, force }),
   })
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) throw new Error(await httpErrorMessage(res))
   return res.json()
 }
 
@@ -78,6 +95,6 @@ export async function queryRepo(
       no_llm: noLlm,
     }),
   })
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) throw new Error(await httpErrorMessage(res))
   return res.json()
 }
