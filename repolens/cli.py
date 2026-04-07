@@ -82,10 +82,10 @@ def resolve_store_path(repo_path: Path, store: str | None) -> Path:
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="repolens")
+@click.version_option(version="0.1.0", prog_name="repodex")
 def main():
     """
-    repolens — local-first codebase context engine.
+    repodex — local-first codebase context engine.
 
     Point it at any Python repo, ask plain English questions,
     get back answers with exact file and line citations.

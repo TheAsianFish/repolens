@@ -3,7 +3,7 @@ requires = ["setuptools>=68,<77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "repolens"
+name = "repodex"
 version = "0.1.0"
 description = "Local-first codebase context engine — ask plain English questions about any Python codebase"
 readme = "README.md"
@@ -44,7 +44,7 @@ dev = [
 ]
 
 [project.scripts]
-repolens = "repolens.cli:main"
+repodex = "repolens.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/TheAsianFish/repolens"

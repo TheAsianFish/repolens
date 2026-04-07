@@ -1,10 +1,10 @@
-# repolens
+# repodex
 
 **Ask plain English questions about any Python codebase. Get answers
 with exact file and line citations. Runs entirely on your machine.**
 ```bash
-repolens index ./myrepo
-repolens query "how does authentication work"
+repodex index ./myrepo
+repodex query "how does authentication work"
 ```
 Searching...
 Generating answer...
@@ -30,7 +30,7 @@ is outdated. Grep finds strings, not meaning. LLM chatbots hallucinate
 file names and function signatures because they have no access to your
 actual code.
 
-repolens indexes your code locally using AST-based chunking — every
+repodex indexes your code locally using AST-based chunking — every
 retrieved chunk is a complete function or class, never an arbitrary
 line slice. It runs entirely on your machine.
 
@@ -78,7 +78,7 @@ file paths and line numbers.
 
 ### Install from PyPI
 ```bash
-pip install repolens
+pip install repodex
 ```
 
 Set your API key:
@@ -101,16 +101,16 @@ cp .env.example .env
 ### CLI
 ```bash
 # Index a repository (~$0.02 per 30k lines, one-time)
-repolens index ./path/to/repo
+repodex index ./path/to/repo
 
 # Ask a question
-repolens query "how does authentication work"
+repodex query "how does authentication work"
 
 # See raw retrieved chunks without an LLM call
-repolens query "where is UserService defined" --no-llm
+repodex query "where is UserService defined" --no-llm
 
 # Force re-index all files after a major refactor
-repolens index ./path/to/repo --force
+repodex index ./path/to/repo --force
 ```
 
 ### Web UI
