@@ -58,11 +58,13 @@ descriptions than to raw syntax.
 **Metadata on every chunk.**
 Each chunk carries: file_path, file_rel_path, node_type, name,
 source, start_line, end_line, token_count, calls, docstring,
-parent_class.
+parent_class, is_truncated.
 calls is stored in ChromaDB as a comma-joined string because
 ChromaDB metadata must be primitive types. Split on read, join
 on write. parent_class and docstring stored as empty string when
 None — ChromaDB does not accept None metadata values.
+is_truncated is stored as bool — True when source was cut at the
+300-token cap. Surfaced as [truncated] in CLI citation output.
 
 **Incremental indexing via SHA-256 file hashing.**
 Every file gets a SHA-256 hash stored in ChromaDB alongside its
@@ -75,12 +77,17 @@ misses semantic similarity. We do both and merge results using
 Reciprocal Rank Fusion (k=60). RRF operates on rank positions not
 raw scores, sidestepping the normalization problem entirely.
 
+**Keyword search minimum token length is 2 characters.**
+Tokens of length 1 are filtered (match too broadly via $contains).
+Tokens of length 2+ are included — this covers common Python
+identifiers like os, db, id, fn that were previously silently
+dropped by the old > 2 guard.
+
 **Call graph expansion after retrieval.**
 After retrieving and ranking top N chunks, we inspect each chunk's
 calls list and fetch any called functions not already in results
 using exact keyword_search by name. Expansions get rerank_score=0.005
 so they never displace primary results — they appear at the end.
-This pulls _walk_tree into context when chunk_file is retrieved.
 Max 3 expansions per query to avoid context overflow.
 
 **Metadata re-ranking as a second pass.**
@@ -100,7 +107,10 @@ Call graph expansions are appended after top 5, up to 3 additional.
 **Chunk token cap: 300 tokens.**
 Hard cap enforced in chunker.py using tiktoken cl100k_base
 encoding — the same encoding gpt-5.4-mini uses internally.
-Oversized chunks are truncated, not discarded.
+Oversized chunks are truncated, not discarded. is_truncated=True
+is set on the Chunk so downstream code and the user can detect it.
+Metadata (calls, docstring, name) is extracted from the full AST
+node before truncation — only source is cut.
 
 **Line numbers are 1-indexed.**
 Tree-sitter uses 0-indexed rows (C convention). We add 1 on
@@ -110,14 +120,31 @@ user sees are 1-indexed.
 **Citations use relative paths.**
 file_rel_path is computed at index time relative to repo root
 and stored as metadata. All citation output uses file_rel_path
-not file_path to avoid exposing absolute paths like
-/Users/patrick/Desktop/... in user-facing output.
+not file_path to avoid exposing absolute paths in user-facing output.
 
-**LLM prompt instructs synthesis across all chunks.**
-System prompt explicitly tells the LLM to use ALL provided chunks,
-not just the most relevant one, and to never claim it lacks
-information if any chunk is partially relevant. Temperature=0.1
-for consistent structured output.
+**LLM uses max_completion_tokens, not max_tokens.**
+gpt-5.4-mini requires max_completion_tokens. Using max_tokens
+raises a 400 BadRequest error. All LLM calls use max_completion_tokens.
+
+**LLM CITATIONS block is stripped before returning answer.**
+parse_citations extracts inline citation labels [1], [2] etc. from
+the full response text. After parsing, _strip_citations_block removes
+everything from the first line starting with "CITATIONS" onward.
+The CLI and API render their own formatted citation sections.
+This prevents citations appearing twice and saves output tokens.
+
+**Confidence label derived from top rerank_score.**
+The CLI footer shows confidence: high/medium/low based on the top
+retrieved chunk's rerank_score. Thresholds:
+  high   >= 0.4   name or file path matched
+  medium >= 0.15  docstring or call graph matched
+  low    < 0.15   vector similarity only
+This replaces the meaningless "N chunks used" counter.
+
+**Query status messages replace progress bar.**
+The CLI prints "Searching..." before retrieval and "Generating
+answer..." before the LLM call. A 2-step progress bar was not a
+real progress indicator and mislabeled the LLM step as "Retrieving".
 
 ---
 
@@ -141,13 +168,16 @@ Hash IDs: "{absolute_file_path}"
 | File | Status | Responsibility |
 |---|---|---|
 | repolens/walker.py | Complete | Filesystem traversal, file filtering |
-| repolens/chunker.py | Complete | AST parsing, chunk + metadata extraction, parent_class tracking |
+| repolens/chunker.py | Complete | AST parsing, chunk + metadata extraction, is_truncated flag |
 | repolens/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator |
 | repolens/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion |
-| repolens/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing |
-| repolens/cli.py | Complete | Click CLI — index and query commands |
+| repolens/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing, CITATIONS block stripping |
+| repolens/cli.py | Complete | Click CLI — index and query commands, confidence label |
 | repolens/api.py | Complete | FastAPI backend — /index, /query, /status, /health |
 | frontend/src/ | Complete | React + TypeScript UI at localhost:3000 |
+
+Note: repolens/embedder.py was deleted. It was an unimplemented stub;
+the embedding logic lives in store.py as _embed_texts and build_embed_text.
 
 ---
 
@@ -156,14 +186,15 @@ Hash IDs: "{absolute_file_path}"
 | File | Tests | Status |
 |---|---|---|
 | tests/test_walker.py | 11 | Passing |
-| tests/test_chunker.py | 21 | Passing |
-| tests/test_store.py | 16 | Passing |
+| tests/test_chunker.py | 23 | Passing |
+| tests/test_store.py | 24 | Passing |
 | tests/test_retriever.py | 22 | Passing |
-| tests/test_llm.py | 14 | Passing |
-| tests/test_cli.py | 7 | Passing |
+| tests/test_llm.py | 21 | Passing |
+| tests/test_cli.py | 12 | Passing |
 | tests/test_api.py | 9 | Passing |
 
 Run all tests: pytest tests/ -v
+Total: 138 passing
 
 Note: test counts above are approximate. Always trust the actual
 pytest output over this table.
@@ -184,8 +215,26 @@ pytest output over this table.
 | 8 | CLI | Complete |
 | 9 | FastAPI backend + React frontend | Complete |
 | 10 | Polish + ship | Complete |
+| 11 | Post-V1 output quality + UX fixes | Complete |
 
-V1 shipped. Next work begins on V2.
+V1 shipped. Post-V1 polish complete. Next work begins on V2.
+
+---
+
+## Post-V1 fixes (Milestone 11)
+
+These were identified after V1 ship and resolved before V2 work begins.
+
+| Fix | File(s) | Commit |
+|---|---|---|
+| max_tokens → max_completion_tokens for gpt-5.4-mini | llm.py, test_llm.py | de01083 |
+| Delete unimplemented embedder.py stub | — | 96248de |
+| Strip duplicate CITATIONS block from LLM answer | llm.py, test_llm.py | 230a44c |
+| Surface is_truncated flag on chunked output | chunker.py, store.py, llm.py, cli.py | 041c695 |
+| Allow 2-char tokens in keyword search (was > 2, now >= 2) | store.py, test_store.py | e140622 |
+| Fix mock_openai_client to return N embeddings per N inputs | test_store.py | e140622 |
+| Replace chunks-used footer with confidence label | cli.py, test_cli.py | cf015c8 |
+| Replace fake 2-step progress bar with status messages | cli.py | a154c10 |
 
 ---
 
@@ -195,6 +244,9 @@ V1 shipped. Next work begins on V2.
 - VS Code extension wrapper
 - Dependency graph visualization
 - "Start here" guide auto-generated for new engineers
+- Secret pattern filter in walker.py (skip files with hardcoded credentials)
+- Smart truncation: preserve head + tail of oversized chunks
+- Index-time warning for truncated chunks
 
 ## V3 Roadmap
 
@@ -213,6 +265,8 @@ V1 shipped. Next work begins on V2.
   a real repository on disk.
 - OpenAI calls are always mocked in tests. Never hit the network
   in a test.
+- mock_openai_client uses side_effect to return one embedding per
+  input text — not a fixed return_value — so multi-chunk tests work.
 - Run pytest after every change before committing.
 - Update CONTEXT.md at the end of every milestone or significant
   change. A milestone is not done until CONTEXT.md reflects it.
@@ -233,7 +287,7 @@ Format: conventional commits
   fix: use file_rel_path in citation output
   refactor: make Parser singleton at module level
   test: add expansion tests to test_retriever
-  docs: update CONTEXT.md for Milestone 10
+  docs: update CONTEXT.md for Milestone 11
   chore: add httpx to dev dependencies
 
 Rules:
@@ -242,7 +296,7 @@ Rules:
 - Always run pytest tests/ -v before committing. Green only.
 - Always run git status before git add. Verify .env is absent.
 - Never use git add . — use git add <specific files>.
-- Push to main after every commit.
+- Push to main after every commit unless instructed otherwise.
 
 Sequence:
   pytest tests/ -v
@@ -269,5 +323,11 @@ Sequence:
 - Do not leave CONTEXT.md outdated after a milestone completes.
 - Do not use file_path in user-facing citation output — always
   use file_rel_path.
-- Do not say the LLM lacks information if any chunk is relevant —
-  the system prompt explicitly instructs synthesis across all chunks.
+- Do not use max_tokens with gpt-5.4-mini — use max_completion_tokens.
+- Do not use a fixed return_value for mock_openai_client — use
+  side_effect so the mock returns the right number of embeddings
+  for any batch size.
+- Do not filter keyword search tokens with len > 2 — the correct
+  guard is len >= 2 to preserve 2-character identifiers like os, db.
+- Do not print the LLM's raw response as the answer — strip the
+  CITATIONS block first via _strip_citations_block.
