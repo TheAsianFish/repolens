@@ -27,6 +27,23 @@ from repolix.llm import answer_query
 
 load_dotenv()
 
+
+def resolve_repo_path(repo_path: str) -> Path:
+    """
+    Resolve repo_path to an absolute directory.
+
+    If the client sends '.' or whitespace only, it means "the API process
+    working directory". When REPOLIX_DEFAULT_REPO is set, '.' and empty
+    strings use that path instead — useful if uvicorn was started outside
+    the repo (see start.sh, which cds to the project root).
+    """
+    stripped = repo_path.strip()
+    default_root = os.environ.get("REPOLIX_DEFAULT_REPO", "").strip()
+    if stripped in (".", "") and default_root:
+        return Path(default_root).expanduser().resolve()
+    return Path(repo_path).expanduser().resolve()
+
+
 # When installed via pip, the pre-built React bundle is copied into the
 # repolix package directory (repolix/dist/) before building the wheel.
 # In development, fall back to the Vite output at frontend/dist/.
@@ -138,7 +155,7 @@ async def index_endpoint(request: IndexRequest):
     and stores everything in ChromaDB. Skips unchanged files unless
     force=True.
     """
-    repo_path = Path(request.repo_path).resolve()
+    repo_path = resolve_repo_path(request.repo_path)
     if not repo_path.exists() or not repo_path.is_dir():
         raise HTTPException(
             status_code=400,
@@ -167,13 +184,19 @@ async def query_endpoint(request: QueryRequest):
     Returns a structured response with the LLM answer, citations,
     and the raw retrieved chunks for display in the frontend.
     """
-    repo_path = Path(request.repo_path).resolve()
+    repo_path = resolve_repo_path(request.repo_path)
     store_path = get_store_path(str(repo_path))
 
     if not (store_path / "chroma.sqlite3").exists():
         raise HTTPException(
             status_code=404,
-            detail=f"No index found for {repo_path}. Run /index first.",
+            detail=(
+                f"No index at {store_path} (missing chroma.sqlite3). "
+                f"Resolved repo: {repo_path}. "
+                "Run POST /index or `repolix index` for that path. "
+                "Note: '.' is the API server working directory unless "
+                "REPOLIX_DEFAULT_REPO is set."
+            ),
         )
 
     client = get_openai_client()
@@ -230,7 +253,7 @@ async def status_endpoint(repo_path: str):
     path for the given repo. Used by the frontend to show whether
     indexing is needed before querying.
     """
-    resolved = Path(repo_path).resolve()
+    resolved = resolve_repo_path(repo_path)
     store_path = get_store_path(str(resolved))
     indexed = (store_path / "chroma.sqlite3").exists()
 

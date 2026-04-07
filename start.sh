@@ -7,6 +7,12 @@
 
 set -e
 
+# Always run from this script's directory so uvicorn's cwd is the project
+# root. Otherwise `repo_path: "."` in the UI resolves to wherever the user
+# was when they launched the script (e.g. home), not the indexed repo.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 echo "Starting repolix..."
 echo ""
 
