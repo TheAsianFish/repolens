@@ -46,6 +46,25 @@ def get_openai_client() -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
+def _confidence_label(top_score: float) -> str:
+    """
+    Map the top rerank_score to a human-readable confidence label.
+
+    Thresholds are derived from the scoring weights in retriever.rerank():
+      +0.3 name match, +0.2 file path match, +0.15 docstring match.
+      RRF base for a top-ranked result in both lists is ~0.033.
+
+      high   >= 0.4  — name or file path matched the query
+      medium >= 0.15 — docstring or call graph matched
+      low    <  0.15 — vector similarity only, no metadata signal
+    """
+    if top_score >= 0.4:
+        return "high"
+    if top_score >= 0.15:
+        return "medium"
+    return "low"
+
+
 def resolve_store_path(repo_path: Path, store: str | None) -> Path:
     """
     Resolve the ChromaDB store directory.
@@ -240,7 +259,9 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
         click.echo("  No citations extracted.")
 
     click.echo("")
+    top_score = results[0].get("rerank_score", 0.0) if results else 0.0
+    confidence = _confidence_label(top_score)
     click.echo(
-        f"[{output['chunks_used']} chunks used — "
-        f"repolens index is at {store_path}]"
+        f"[confidence: {confidence} · {output['chunks_used']} chunks"
+        f" · index: {store_path}]"
     )

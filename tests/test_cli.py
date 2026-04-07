@@ -9,7 +9,7 @@ functions are mocked throughout.
 import pytest
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
-from repolens.cli import main
+from repolens.cli import main, _confidence_label
 
 
 def mock_index_repo_result(
@@ -22,6 +22,27 @@ def mock_index_repo_result(
         "total_chunks": chunks,
         "errors": errors or [],
     }
+
+
+class TestConfidenceLabel:
+
+    def test_high_confidence_above_threshold(self):
+        assert _confidence_label(0.5) == "high"
+        assert _confidence_label(0.4) == "high"
+
+    def test_medium_confidence_in_range(self):
+        assert _confidence_label(0.3) == "medium"
+        assert _confidence_label(0.15) == "medium"
+
+    def test_low_confidence_below_threshold(self):
+        assert _confidence_label(0.1) == "low"
+        assert _confidence_label(0.0) == "low"
+
+    def test_boundary_at_0_4_is_high(self):
+        assert _confidence_label(0.4) == "high"
+
+    def test_just_below_0_4_is_medium(self):
+        assert _confidence_label(0.399) == "medium"
 
 
 class TestIndexCommand:
@@ -152,3 +173,4 @@ class TestQueryCommand:
             )
             assert "Answer" in result.output
             assert "Citations" in result.output
+            assert "confidence:" in result.output
