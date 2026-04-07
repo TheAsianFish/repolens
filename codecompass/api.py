@@ -1,7 +1,7 @@
 """
 api.py
 
-FastAPI backend for repolens. Exposes the indexing and query
+FastAPI backend for codecompass. Exposes the indexing and query
 pipeline over HTTP so the React frontend can consume it.
 
 Endpoints:
@@ -21,21 +21,21 @@ from openai import OpenAI
 from pydantic import BaseModel
 from starlette.staticfiles import StaticFiles
 
-from repolens.store import index_repo
-from repolens.retriever import retrieve
-from repolens.llm import answer_query
+from codecompass.store import index_repo
+from codecompass.retriever import retrieve
+from codecompass.llm import answer_query
 
 load_dotenv()
 
 # When installed via pip, the pre-built React bundle is copied into the
-# repolens package directory (repolens/dist/) before building the wheel.
+# codecompass package directory (codecompass/dist/) before building the wheel.
 # In development, fall back to the Vite output at frontend/dist/.
 _PKG_DIST = Path(__file__).parent / "dist"
 _DEV_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 DIST_DIR = _PKG_DIST if _PKG_DIST.exists() else _DEV_DIST
 
 app = FastAPI(
-    title="repolens",
+    title="codecompass",
     description="Local-first codebase context engine",
     version="0.1.0",
 )
@@ -67,7 +67,7 @@ def get_openai_client() -> OpenAI:
 
 def get_store_path(repo_path: str) -> Path:
     """Resolve the ChromaDB store path for a given repo."""
-    return Path(repo_path).resolve() / ".repolens"
+    return Path(repo_path).resolve() / ".codecompass"
 
 
 # ── Request / Response Models ─────────────────────────────────────────────────

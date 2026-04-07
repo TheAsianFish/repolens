@@ -1,13 +1,13 @@
 #!/bin/bash
 # start.sh
-# Starts the repolens FastAPI backend and React frontend together.
+# Starts the codecompass FastAPI backend and React frontend together.
 # Run from the project root after completing setup in README.md.
 #
 # Usage: bash start.sh
 
 set -e
 
-echo "Starting repolens..."
+echo "Starting codecompass..."
 echo ""
 
 # Verify environment
@@ -25,7 +25,7 @@ fi
 
 # Start FastAPI backend in background
 echo "Starting FastAPI backend at http://localhost:8000"
-uvicorn repolens.api:app --host 0.0.0.0 --port 8000 --reload &
+uvicorn codecompass.api:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
 sleep 2
@@ -38,7 +38,7 @@ FRONTEND_PID=$!
 cd ..
 
 echo ""
-echo "repolens is running."
+echo "codecompass is running."
 echo "  Backend:  http://localhost:8000"
 echo "  Frontend: http://localhost:3000"
 echo "  Docs:     http://localhost:8000/docs"

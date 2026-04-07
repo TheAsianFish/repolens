@@ -1,5 +1,5 @@
 """
-Tests for repolens/api.py.
+Tests for codecompass/api.py.
 
 Uses FastAPI's TestClient which runs the ASGI app in-process
 without a real server. index_repo, retrieve, and answer_query
@@ -9,7 +9,7 @@ are mocked throughout.
 import pytest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
-from repolens.api import app
+from codecompass.api import app
 
 client = TestClient(app)
 
@@ -55,8 +55,8 @@ class TestHealthEndpoint:
 class TestIndexEndpoint:
 
     def test_index_valid_repo(self, tmp_path):
-        with patch("repolens.api.get_openai_client"), \
-             patch("repolens.api.index_repo",
+        with patch("codecompass.api.get_openai_client"), \
+             patch("codecompass.api.index_repo",
                    return_value=mock_index_stats()):
             response = client.post("/index", json={
                 "repo_path": str(tmp_path),
@@ -69,7 +69,7 @@ class TestIndexEndpoint:
         assert data["total_chunks"] == 10
 
     def test_index_invalid_repo_returns_400(self):
-        with patch("repolens.api.get_openai_client"):
+        with patch("codecompass.api.get_openai_client"):
             response = client.post("/index", json={
                 "repo_path": "/nonexistent/path",
                 "force": False,
@@ -77,7 +77,7 @@ class TestIndexEndpoint:
         assert response.status_code == 400
 
     def test_index_missing_api_key_returns_500(self, tmp_path):
-        with patch("repolens.api.os.getenv", return_value=None):
+        with patch("codecompass.api.os.getenv", return_value=None):
             response = client.post("/index", json={
                 "repo_path": str(tmp_path),
             })
@@ -87,7 +87,7 @@ class TestIndexEndpoint:
 class TestQueryEndpoint:
 
     def test_query_no_index_returns_404(self, tmp_path):
-        with patch("repolens.api.get_openai_client"):
+        with patch("codecompass.api.get_openai_client"):
             response = client.post("/query", json={
                 "question": "how does auth work",
                 "repo_path": str(tmp_path),
@@ -95,7 +95,7 @@ class TestQueryEndpoint:
         assert response.status_code == 404
 
     def test_query_returns_answer_and_citations(self, tmp_path):
-        store = tmp_path / ".repolens"
+        store = tmp_path / ".codecompass"
         store.mkdir()
         (store / "chroma.sqlite3").touch()
 
@@ -112,9 +112,9 @@ class TestQueryEndpoint:
             "chunks_used": 1,
         }
 
-        with patch("repolens.api.get_openai_client"), \
-             patch("repolens.api.retrieve", return_value=mock_results()), \
-             patch("repolens.api.answer_query", return_value=mock_answer):
+        with patch("codecompass.api.get_openai_client"), \
+             patch("codecompass.api.retrieve", return_value=mock_results()), \
+             patch("codecompass.api.answer_query", return_value=mock_answer):
             response = client.post("/query", json={
                 "question": "how does auth work",
                 "repo_path": str(tmp_path),
@@ -127,13 +127,13 @@ class TestQueryEndpoint:
         assert len(data["chunks"]) == 1
 
     def test_query_no_llm_skips_answer(self, tmp_path):
-        store = tmp_path / ".repolens"
+        store = tmp_path / ".codecompass"
         store.mkdir()
         (store / "chroma.sqlite3").touch()
 
-        with patch("repolens.api.get_openai_client"), \
-             patch("repolens.api.retrieve", return_value=mock_results()), \
-             patch("repolens.api.answer_query") as mock_llm:
+        with patch("codecompass.api.get_openai_client"), \
+             patch("codecompass.api.retrieve", return_value=mock_results()), \
+             patch("codecompass.api.answer_query") as mock_llm:
             response = client.post("/query", json={
                 "question": "query",
                 "repo_path": str(tmp_path),
@@ -153,7 +153,7 @@ class TestStatusEndpoint:
         assert response.json()["indexed"] is False
 
     def test_status_indexed(self, tmp_path):
-        store = tmp_path / ".repolens"
+        store = tmp_path / ".codecompass"
         store.mkdir()
         (store / "chroma.sqlite3").touch()
         response = client.get(f"/status?repo_path={tmp_path}")

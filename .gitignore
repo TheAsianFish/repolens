@@ -17,8 +17,8 @@ ENV/
 # Environment variables — NEVER commit the real .env
 .env
 
-# repolens data
-.repolens/
+# codecompass data
+.codecompass/
 .chroma/
 
 # Testing and tooling

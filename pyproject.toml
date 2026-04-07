@@ -3,7 +3,7 @@ requires = ["setuptools>=68,<77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "repodex"
+name = "codecompass"
 version = "0.1.0"
 description = "Local-first codebase context engine — ask plain English questions about any Python codebase"
 readme = "README.md"
@@ -44,11 +44,11 @@ dev = [
 ]
 
 [project.scripts]
-repodex = "repolens.cli:main"
+codecompass = "codecompass.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/TheAsianFish/repolens"
-Issues = "https://github.com/TheAsianFish/repolens/issues"
+Homepage = "https://github.com/TheAsianFish/codecompass"
+Issues = "https://github.com/TheAsianFish/codecompass/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -56,10 +56,10 @@ exclude = ["tests*", "build*"]
 
 # Ship the pre-built React bundle with the package so the FastAPI server
 # can serve the SPA without Node.js being installed on the user's machine.
-# The dist files are copied from frontend/dist into repolens/dist before
+# The dist files are copied from frontend/dist into codecompass/dist before
 # running python -m build (see build instructions in README).
 [tool.setuptools.package-data]
-repolens = ["dist/**/*", "dist/*"]
+codecompass = ["dist/**/*", "dist/*"]
 
 [tool.ruff]
 line-length = 88

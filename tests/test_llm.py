@@ -1,5 +1,5 @@
 """
-Tests for repolens/llm.py.
+Tests for codecompass/llm.py.
 
 OpenAI calls are mocked. We test prompt construction, citation
 parsing, and the full answer_query pipeline without hitting the API.
@@ -7,7 +7,7 @@ parsing, and the full answer_query pipeline without hitting the API.
 
 import pytest
 from unittest.mock import MagicMock
-from repolens.llm import (
+from codecompass.llm import (
     build_prompt,
     parse_citations,
     answer_query,

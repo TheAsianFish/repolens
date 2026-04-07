@@ -1,5 +1,5 @@
 """
-Tests for repolens/store.py.
+Tests for codecompass/store.py.
 
 OpenAI calls are mocked — tests never hit the network.
 ChromaDB uses tmp_path for isolation between tests.
@@ -8,8 +8,8 @@ ChromaDB uses tmp_path for isolation between tests.
 import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from repolens.chunker import Chunk
-from repolens.store import (
+from codecompass.chunker import Chunk
+from codecompass.store import (
     hash_file,
     build_embed_text,
     chunk_to_metadata,

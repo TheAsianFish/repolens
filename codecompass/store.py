@@ -19,7 +19,7 @@ import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
 
-from repolens.chunker import Chunk
+from codecompass.chunker import Chunk
 
 # Embedding model. text-embedding-3-small is cheap, fast, and high
 # quality. 1536-dimensional output vectors. Cost is ~$0.02 per
@@ -36,8 +36,8 @@ EMBED_BATCH_SIZE = 100
 # - "chunks" stores the actual code chunks with their embeddings
 # - "file_hashes" stores one document per file recording its hash,
 #   used to detect which files changed since last index run.
-CHUNKS_COLLECTION = "repolens_chunks"
-HASHES_COLLECTION = "repolens_hashes"
+CHUNKS_COLLECTION = "codecompass_chunks"
+HASHES_COLLECTION = "codecompass_hashes"
 
 
 def _get_client(store_path: str | Path) -> chromadb.ClientAPI:
@@ -414,8 +414,8 @@ def index_repo(
             total_chunks: int — chunks stored across all indexed files
             errors: list[str] — files that failed with error messages
     """
-    from repolens.walker import walk_repo
-    from repolens.chunker import chunk_file
+    from codecompass.walker import walk_repo
+    from codecompass.chunker import chunk_file
 
     repo_path = Path(repo_path).resolve()
     store_path = Path(store_path).resolve()

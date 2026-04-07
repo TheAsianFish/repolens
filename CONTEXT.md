@@ -1,4 +1,4 @@
-# repolens — Project Context
+# codecompass — Project Context
 
 Paste this file at the top of every new Cursor chat and every new
 Claude conversation to restore full project context instantly.
@@ -6,7 +6,7 @@ Update this file at the end of every milestone before moving on.
 
 ---
 
-## What repolens is
+## What codecompass is
 
 A local-first codebase context engine. Point it at any Python repo,
 ask plain English questions, get back answers with exact file and
@@ -27,7 +27,7 @@ Free and open source. Built for developer tooling.
 | Web server | FastAPI | Async, simple, automatic validation |
 | Frontend | React + TypeScript | SPA served by FastAPI from frontend/dist; dev via Vite at localhost:3000 |
 | CLI | Click | Python CLI standard |
-| Install | pip install repolens | One command |
+| Install | pip install codecompass | One command |
 
 ---
 
@@ -165,11 +165,11 @@ have no Node.js runtime dependency.
 
 | Collection | Purpose |
 |---|---|
-| repolens_chunks | Stores chunk source, embeddings, metadata |
-| repolens_hashes | Stores one hash per file for incremental indexing |
+| codecompass_chunks | Stores chunk source, embeddings, metadata |
+| codecompass_hashes | Stores one hash per file for incremental indexing |
 
-ChromaDB persists to .repolens/ inside the indexed repo root.
-.repolens/ is gitignored.
+ChromaDB persists to .codecompass/ inside the indexed repo root.
+.codecompass/ is gitignored.
 
 Chunk IDs: "{absolute_file_path}:{start_line}"
 Hash IDs: "{absolute_file_path}"
@@ -180,17 +180,17 @@ Hash IDs: "{absolute_file_path}"
 
 | File | Status | Responsibility |
 |---|---|---|
-| repolens/walker.py | Complete | Filesystem traversal, file filtering |
-| repolens/chunker.py | Complete | AST parsing, chunk + metadata extraction, is_truncated flag |
-| repolens/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator |
-| repolens/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion |
-| repolens/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing, CITATIONS block stripping |
-| repolens/cli.py | Complete | Click CLI — index and query commands, confidence label |
-| repolens/api.py | Complete | FastAPI backend — /index, /query, /status, /health; serves built SPA from frontend/dist |
+| codecompass/walker.py | Complete | Filesystem traversal, file filtering |
+| codecompass/chunker.py | Complete | AST parsing, chunk + metadata extraction, is_truncated flag |
+| codecompass/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator |
+| codecompass/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion |
+| codecompass/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing, CITATIONS block stripping |
+| codecompass/cli.py | Complete | Click CLI — index and query commands, confidence label |
+| codecompass/api.py | Complete | FastAPI backend — /index, /query, /status, /health; serves built SPA from frontend/dist |
 | frontend/src/ | Complete | React + TypeScript SPA; Vite dev server for development; built output served by FastAPI |
 | tests/conftest.py | Complete | Creates minimal frontend/dist stub before TestClient initialises |
 
-Note: repolens/embedder.py was deleted. It was an unimplemented stub;
+Note: codecompass/embedder.py was deleted. It was an unimplemented stub;
 the embedding logic lives in store.py as _embed_texts and build_embed_text.
 
 ---
@@ -250,11 +250,11 @@ These were identified after V1 ship and resolved before V2 work begins.
 | Replace chunks-used footer with confidence label | cli.py, test_cli.py | cf015c8 |
 | Replace fake 2-step progress bar with status messages | cli.py | a154c10 |
 || Disable noUnusedLocals/noUnusedParameters to unblock npm run build | frontend/tsconfig.json | 338c1e4 |
-|| Serve built React SPA from FastAPI; catch-all route for client-side routing | repolens/api.py | 12a2ddd |
+|| Serve built React SPA from FastAPI; catch-all route for client-side routing | codecompass/api.py | 12a2ddd |
 || Add conftest.py to create minimal frontend/dist stub before TestClient initialises | tests/conftest.py | c1d1e69 |
 || Complete pyproject.toml for PyPI: authors, classifiers, tiktoken, package-data | pyproject.toml | 5514e3c |
 || Add MANIFEST.in for sdist completeness | MANIFEST.in | 56f50e1 |
-|| Fix DIST_DIR to resolve from package dir when installed via pip | repolens/api.py | e90854a |
+|| Fix DIST_DIR to resolve from package dir when installed via pip | codecompass/api.py | e90854a |
 
 ---
 
@@ -263,13 +263,13 @@ These were identified after V1 ship and resolved before V2 work begins.
 Run these steps in order before every release:
 
   npm run build --prefix frontend        # rebuild React bundle
-  cp -r frontend/dist repolens/dist      # stage bundle inside Python package
+  cp -r frontend/dist codecompass/dist      # stage bundle inside Python package
   python -m build                        # creates dist/*.whl and dist/*.tar.gz
   twine check dist/*                     # validate metadata before upload
   twine upload dist/*                    # upload to PyPI (prompts for token)
 
 On PyPI, use an API token (not your password). Create one at
-https://pypi.org/manage/account/token/ scoped to the repolens project.
+https://pypi.org/manage/account/token/ scoped to the codecompass project.
 Store it in ~/.pypirc or pass as the password when twine prompts
 (username = __token__, password = pypi-...).
 

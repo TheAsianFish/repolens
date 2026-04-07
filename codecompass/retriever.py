@@ -16,7 +16,7 @@ Pipeline:
 
 from pathlib import Path
 from openai import OpenAI
-from repolens.store import query_chunks, keyword_search
+from codecompass.store import query_chunks, keyword_search
 
 # How many results to retrieve from each search before merging.
 # Over-retrieving gives RRF and re-ranking room to work.

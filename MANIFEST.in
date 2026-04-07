@@ -1,4 +1,4 @@
 include README.md
 include LICENSE
 recursive-include frontend/dist *
-recursive-include repolens *.py
+recursive-include codecompass *.py
