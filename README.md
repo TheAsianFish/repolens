@@ -6,6 +6,8 @@ with exact file and line citations. Runs entirely on your machine.**
 repolens index ./myrepo
 repolens query "how does authentication work"
 ```
+Searching...
+Generating answer...
 ── Answer ────────────────────────────────────────────────
 authenticate_user() validates credentials by calling validate_token()
 [1] which checks expiry and signature. On success it creates a
@@ -13,6 +15,8 @@ session via SessionService.create() [2].
 ── Citations ─────────────────────────────────────────────
 [1] auth/validators.py:14-28    (validate_token)
 [2] auth/session.py:45-67       (SessionService.create)
+
+[confidence: high · 5 chunks · index: ./myrepo/.repolens]
 
 Your code never leaves your machine. No server. No accounts beyond
 an OpenAI API key.
@@ -132,12 +136,31 @@ almost nothing — only changed files are re-embedded.
 
 ---
 
+## Output
+
+Each query produces:
+
+- A prose answer with inline citations `[1]`, `[2]` etc.
+- A citations section with exact file paths and line ranges.
+  Citations marked `[truncated]` mean the function exceeded the
+  300-token chunk cap — the answer is based on a partial view of
+  that function.
+- A confidence label (`high` / `medium` / `low`) derived from how
+  strongly the retrieved chunks matched the query across function
+  names, file paths, docstrings, and call graph signals.
+
+---
+
 ## Limitations
 
 - Python repos only. TypeScript support planned for V2.
 - Best on repos up to ~30k lines.
 - Deeply nested functions are included in their parent chunk.
+- Large functions (>300 tokens) are truncated at the chunk cap.
+  The `[truncated]` marker in citations flags when this occurs.
 - Complex cross-file reasoning may require rephrasing the query.
+- Architecture-level questions (layer structure, dependency graphs)
+  require the V2 dependency graph feature to answer reliably.
 
 ---
 
