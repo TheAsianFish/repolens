@@ -55,7 +55,7 @@ class TestIndexCommand:
             runner = CliRunner()
             result = runner.invoke(main, ["index", str(tmp_path)])
             assert result.exit_code == 0
-            assert "Index complete" in result.output
+            assert "Index Complete" in result.output
 
     def test_index_shows_file_counts(self, tmp_path):
         with patch("repolix.cli.get_openai_client"), \
