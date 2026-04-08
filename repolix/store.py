@@ -429,6 +429,7 @@ def index_repo(
         "indexed": 0,
         "skipped": 0,
         "total_chunks": 0,
+        "cleaned": 0,
         "errors": [],
     }
 
@@ -459,5 +460,26 @@ def index_repo(
 
         if progress_callback:
             progress_callback(i + 1, total, str(file_path))
+
+    # Garbage-collect orphaned entries — chunks and hashes for files
+    # that no longer exist in the repo (deleted, renamed, moved).
+    # walk_repo only returns currently existing files, so any stored
+    # hash whose ID is not in the current file set is stale.
+    current_paths = {str(Path(f).resolve()) for f in files}
+    db = _get_client(store_path)
+    chunks_col = db.get_or_create_collection(CHUNKS_COLLECTION)
+    hashes_col = db.get_or_create_collection(
+        HASHES_COLLECTION, embedding_function=None
+    )
+
+    stored = hashes_col.get(include=[])  # IDs only — no documents needed
+    orphaned = [p for p in stored["ids"] if p not in current_paths]
+
+    for orphaned_path in orphaned:
+        existing = chunks_col.get(where={"file_path": orphaned_path})
+        if existing["ids"]:
+            chunks_col.delete(ids=existing["ids"])
+        hashes_col.delete(ids=[orphaned_path])
+        stats["cleaned"] += 1
 
     return stats
