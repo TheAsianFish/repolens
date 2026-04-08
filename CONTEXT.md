@@ -74,6 +74,15 @@ Every file gets a SHA-256 hash stored in ChromaDB alongside its
 chunks. Re-indexing skips files whose hash has not changed.
 Only changed files are re-embedded and re-stored.
 
+**Orphan cleanup on every index run.**
+After processing all current files, index_repo compares the full
+set of stored hash IDs against the walked file set. Any stored path
+not present in the current walk (deleted, renamed, moved) is an
+orphan — its chunks and its hash entry are deleted. stats["cleaned"]
+records the count. The CLI surfaces this only when cleaned > 0 to
+avoid noise on normal runs. This prevents stale code from deleted
+files appearing in query results.
+
 **Hybrid search: vector similarity + keyword search, merged via RRF.**
 Pure vector search misses exact name matches. Pure keyword search
 misses semantic similarity. We do both and merge results using
@@ -213,14 +222,14 @@ the embedding logic lives in store.py as _embed_texts and build_embed_text.
 |---|---|---|
 | tests/test_walker.py | 11 | Passing |
 | tests/test_chunker.py | 23 | Passing |
-| tests/test_store.py | 24 | Passing |
+| tests/test_store.py | 28 | Passing |
 | tests/test_retriever.py | 22 | Passing |
 | tests/test_llm.py | 21 | Passing |
 | tests/test_cli.py | 12 | Passing |
 | tests/test_api.py | 9 | Passing |
 
 Run all tests: pytest tests/ -v
-Total: 138 passing
+Total: 142 passing
 
 Note: test counts above are approximate. Always trust the actual
 pytest output over this table.
@@ -428,3 +437,5 @@ Sequence:
 - Do not pass citation label strings like [1] directly into Rich markup
   strings — use rich.markup.escape() to prevent them being interpreted
   as markup tags.
+- Do not patch "repolix.store.chunk_file" in tests — chunk_file is
+  imported locally inside index_repo, so patch "repolix.chunker.chunk_file".
