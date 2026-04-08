@@ -4,51 +4,32 @@
 
 ```
 $ repolix index ./myrepo
-$ repolix query "how does authentication work"
+Indexing /path/to/myrepo
+Indexing  100% ████████████████████ 24/24
+╭──────── Index Complete ─────────╮
+│ Files found:    24              │
+│ Files indexed:  22              │
+│ Files skipped:  2 (unchanged)   │
+│ Chunks stored:  183             │
+╰─────────────────────────────────╯
 
+$ repolix query "how does authentication work"
 Searching...
 Generating answer...
+╭──────────────────────── Answer ──────────────────────────╮
+│ authenticate_user() in auth/validators.py validates       │
+│ credentials by calling validate_token() [1], which checks │
+│ expiry and signature. On success it creates a session via │
+│ SessionService.create() [2].                              │
+╰───────────────────────────────────────────────────────────╯
+──────────────────────── Citations ────────────────────────
+  [1] auth/validators.py:14-28  (validate_token)
+  [2] auth/session.py:45-67     (SessionService.create)
 
-── Answer ──────────────────────────────────────────────────────────────
-authenticate_user() validates credentials by calling validate_token() [1]
-which checks expiry and signature. On success it creates a session via
-SessionService.create() [2].
-
-── Citations ───────────────────────────────────────────────────────────
-[1] auth/validators.py:14-28    (validate_token)
-[2] auth/session.py:45-67       (SessionService.create)
-
-[confidence: high · 5 chunks · index: ./myrepo/.repolix]
+confidence: high
 ```
 
 Your code never leaves your machine. No server. No accounts beyond an OpenAI API key.
-
----
-
-## Why repolix
-
-Getting dropped into an unfamiliar codebase is painful. Documentation is outdated. Grep finds strings, not meaning. LLM chatbots hallucinate file names and function signatures because they have no access to your actual code.
-
-repolix indexes your code locally using AST-based chunking — every retrieved chunk is a complete function or class, never an arbitrary line slice. It runs entirely on your machine.
-
----
-
-## How it works
-
-**1. AST chunking**
-Tree-sitter parses each file into a syntax tree. repolix splits only at function and class boundaries — every chunk is semantically complete. Methods are tracked with their parent class for disambiguation.
-
-**2. Hybrid search**
-Queries run against OpenAI embeddings (vector search) and exact token matching (keyword search) simultaneously. Results are merged using Reciprocal Rank Fusion, a ranking algorithm that rewards consistency across search methods over dominance in just one.
-
-**3. Call graph expansion**
-After initial retrieval, repolix inspects each chunk's call graph and fetches called functions that didn't rank highly on their own. This surfaces implementation details that live one function call away from the entry point.
-
-**4. Metadata re-ranking**
-Retrieved chunks are re-ranked using function names, file paths, docstrings, and call graph signals before being sent to the LLM.
-
-**5. Cited answers**
-The top chunks go to the LLM with instructions to synthesize across all chunks and cite every claim. Citations map back to exact file paths and line numbers.
 
 ---
 
@@ -85,10 +66,10 @@ repolix index ./path/to/repo
 ```bash
 repolix query "how does authentication work"
 
-# Raw chunks without LLM
+# Raw chunks without LLM (useful for debugging retrieval)
 repolix query "where is UserService defined" --no-llm
 
-# Force re-index all files
+# Force re-index all files, not just changed ones
 repolix index ./path/to/repo --force
 ```
 
@@ -99,25 +80,42 @@ uvicorn repolix.api:app --port 8000
 # Open http://localhost:8000
 ```
 
-**For frontend development** (requires Node.js 18+):
+---
 
-```bash
-cd frontend && npm install && cd ..
-bash start.sh
-# Backend: http://localhost:8000  |  Frontend: http://localhost:3000
-```
+## Why repolix
+
+Getting dropped into an unfamiliar codebase is painful. Documentation is outdated. Grep finds strings, not meaning. LLM chatbots hallucinate file names and function signatures because they have no access to your actual code.
+
+repolix indexes your code locally using AST-based chunking — every retrieved chunk is a complete function or class, never an arbitrary line slice. It runs entirely on your machine.
 
 ---
 
-## Install from source
+## How it works
 
-```bash
-git clone https://github.com/TheAsianFish/repolix
-cd repolix
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
+**1. AST chunking**
+Tree-sitter parses each file into a syntax tree. repolix splits only at function and class boundaries — every chunk is semantically complete. Methods are tracked with their parent class for disambiguation.
+
+**2. Hybrid search**
+Queries run against OpenAI embeddings (vector search) and exact token matching (keyword search) simultaneously. Results are merged using Reciprocal Rank Fusion, a ranking algorithm that rewards consistency across search methods over dominance in just one.
+
+**3. Call graph expansion**
+After initial retrieval, repolix inspects each chunk's call graph and fetches called functions that didn't rank highly on their own. This surfaces implementation details that live one function call away from the entry point.
+
+**4. Metadata re-ranking**
+Retrieved chunks are re-ranked using function names, file paths, docstrings, and call graph signals before being sent to the LLM.
+
+**5. Cited answers**
+The top chunks go to the LLM with instructions to answer directly and cite every claim. Citations map back to exact file paths and line numbers.
+
+---
+
+## Output format
+
+Each query produces:
+
+- A prose answer with inline citations `[1]`, `[2]`, etc.
+- A citations section with exact file paths and line ranges. Citations marked `[truncated]` mean the function exceeded the 300-token chunk cap.
+- A confidence label (`high` / `medium` / `low`) based on how strongly the retrieved chunks matched the query across function names, file paths, docstrings, and call graph signals.
 
 ---
 
@@ -140,20 +138,30 @@ Incremental indexing means only changed files are re-embedded on subsequent runs
 | AST parsing | Tree-sitter |
 | Embeddings | text-embedding-3-small |
 | Vector store | ChromaDB (local, no server needed) |
-| LLM | gpt-4o-mini |
+| LLM | gpt-5.4-mini |
 | Backend | FastAPI |
 | Frontend | React + TypeScript |
-| CLI | Click |
+| CLI | Click + Rich |
 
 ---
 
-## Output format
+## Install from source
 
-Each query produces:
+```bash
+git clone https://github.com/TheAsianFish/repolix
+cd repolix
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
 
-- A prose answer with inline citations `[1]`, `[2]`, etc.
-- A citations section with exact file paths and line ranges. Citations marked `[truncated]` mean the function exceeded the 300-token chunk cap.
-- A confidence label (`high` / `medium` / `low`) derived from how strongly the retrieved chunks matched the query across function names, file paths, docstrings, and call graph signals.
+**For frontend development** (requires Node.js 18+):
+
+```bash
+cd frontend && npm install && cd ..
+bash start.sh
+# Backend: http://localhost:8000  |  Frontend: http://localhost:3000
+```
 
 ---
 
