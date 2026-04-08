@@ -19,6 +19,10 @@ from pathlib import Path
 import click
 from dotenv import load_dotenv
 from openai import OpenAI
+from rich.console import Console
+from rich.markup import escape
+from rich.panel import Panel
+from rich.rule import Rule
 
 from repolix.store import index_repo
 from repolix.retriever import retrieve, format_results
@@ -116,13 +120,16 @@ def index(repo_path: str, store: str | None, force: bool):
       repolix index ./myrepo --force
       repolix index ./myrepo --store /tmp/myrepo-index
     """
+    # Console created here (not at module level) so Click's CliRunner
+    # can capture output correctly in tests — CliRunner patches sys.stdout
+    # after module load, so a module-level Console would miss that patch.
+    console = Console(highlight=False)
+
     repo = Path(repo_path).resolve()
     client = get_openai_client()
     store_path = resolve_store_path(repo, store)
 
-    click.echo(f"Indexing {repo}")
-    click.echo(f"Store:   {store_path}")
-    click.echo("")
+    console.print(f"[dim]Indexing {repo}[/dim]")
 
     # We use a mutable container for progress state so the callback
     # closure can update it. Plain int variables in closures are
@@ -154,12 +161,13 @@ def index(repo_path: str, store: str | None, force: bool):
             progress_callback=progress_callback,
         )
 
-    click.echo("")
-    click.echo("── Index complete ──────────────────────────")
-    click.echo(f"Files found:    {stats['total_files']}")
-    click.echo(f"Files indexed:  {stats['indexed']}")
-    click.echo(f"Files skipped:  {stats['skipped']} (unchanged)")
-    click.echo(f"Chunks stored:  {stats['total_chunks']}")
+    summary = (
+        f"Files found:    {stats['total_files']}\n"
+        f"Files indexed:  {stats['indexed']}\n"
+        f"Files skipped:  {stats['skipped']} (unchanged)\n"
+        f"Chunks stored:  {stats['total_chunks']}"
+    )
+    console.print(Panel(summary, title="[bold]Index Complete[/bold]", border_style="dim"))
 
     if stats["errors"]:
         click.echo(f"\nErrors ({len(stats['errors'])}):")
@@ -204,6 +212,8 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
       repolix query "where is the database connection set up"
       repolix query "what does UserService do" --no-llm
     """
+    console = Console(highlight=False)
+
     repo_path = Path(repo).resolve()
     client = get_openai_client()
     store_path = resolve_store_path(repo_path, store)
@@ -214,11 +224,7 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
             f"Run: repolix index {repo_path}"
         )
 
-    click.echo(f"Query:  {question}")
-    click.echo(f"Store:  {store_path}")
-    click.echo("")
-
-    click.echo("Searching...")
+    console.print("[dim]Searching...[/dim]")
     results = retrieve(
         query=question,
         store_path=store_path,
@@ -229,36 +235,39 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
         click.echo(format_results(results))
         return
 
-    click.echo("Generating answer...")
+    console.print("[dim]Generating answer...[/dim]")
     output = answer_query(
         query=question,
         results=results,
         openai_client=client,
     )
 
-    click.echo("── Answer ──────────────────────────────────")
-    click.echo(output["answer"])
-    click.echo("")
-    click.echo("── Citations ───────────────────────────────")
+    console.print(Panel(output["answer"], title="[bold cyan]Answer[/bold cyan]", border_style="cyan"))
+
+    console.print(Rule("[dim]Citations[/dim]", style="dim"))
 
     if output["citations"]:
         for citation in output["citations"]:
             label = citation["label"]
-            path = citation["file_rel_path"]
+            path = citation.get("file_rel_path") or ""
+            if not path:
+                # Fall back to last two path components of absolute path
+                parts = Path(citation.get("file_path", "")).parts
+                path = str(Path(*parts[-2:])) if len(parts) >= 2 else citation.get("file_path", "")
             start = citation["start_line"]
             end = citation["end_line"]
             name = citation["name"]
             parent = citation.get("parent_class")
             context = f"{parent}.{name}" if parent else name
-            truncated = " [truncated]" if citation.get("is_truncated") else ""
-            click.echo(f"  {label} {path}:{start}-{end}  ({context}){truncated}")
+            truncated = "  [dim][truncated][/dim]" if citation.get("is_truncated") else ""
+            # escape() prevents [1], [2] label brackets from being parsed
+            # as Rich markup tags.
+            console.print(
+                f"  [bold]{escape(label)}[/bold] {path}:{start}-{end}  ({context}){truncated}"
+            )
     else:
-        click.echo("  No citations extracted.")
+        console.print("  No citations extracted.")
 
-    click.echo("")
     top_score = results[0].get("rerank_score", 0.0) if results else 0.0
     confidence = _confidence_label(top_score)
-    click.echo(
-        f"[confidence: {confidence} · {output['chunks_used']} chunks"
-        f" · index: {store_path}]"
-    )
+    console.print(f"\n[dim]confidence: {confidence}[/dim]")
