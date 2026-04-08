@@ -158,13 +158,17 @@ def index(repo_path: str, store: str | None, force: bool):
             progress_callback=progress_callback,
         )
 
-    summary = (
-        f"Files found:    {stats['total_files']}\n"
-        f"Files indexed:  {stats['indexed']}\n"
-        f"Files skipped:  {stats['skipped']} (unchanged)\n"
-        f"Chunks stored:  {stats['total_chunks']}"
-    )
-    console.print(Panel(summary, title="[bold]Index Complete[/bold]", border_style="dim"))
+    summary_lines = [
+        f"Files found:    {stats['total_files']}",
+        f"Files indexed:  {stats['indexed']}",
+        f"Files skipped:  {stats['skipped']} (unchanged)",
+        f"Chunks stored:  {stats['total_chunks']}",
+    ]
+    if stats.get("cleaned", 0):
+        summary_lines.append(
+            f"[dim]Orphans removed: {stats['cleaned']} (deleted/renamed files)[/dim]"
+        )
+    console.print(Panel("\n".join(summary_lines), title="[bold]Index Complete[/bold]", border_style="dim"))
 
     if stats["errors"]:
         click.echo(f"\nErrors ({len(stats['errors'])}):")
