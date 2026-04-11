@@ -1,55 +1,75 @@
-import React, { useState } from 'react'
-
 interface Props {
-  onSubmit: (question: string) => void
-  loading: boolean
+  question: string
+  onQuestionChange: (q: string) => void
+  onSubmit: () => void
+  isQuerying: boolean
 }
 
-export function QueryBox({ onSubmit, loading }: Props) {
-  const [value, setValue] = useState('')
-
+export function QueryBox({
+  question,
+  onQuestionChange,
+  onSubmit,
+  isQuerying,
+}: Props) {
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey && value.trim()) {
+    if (e.key === 'Enter' && !e.shiftKey && question.trim() && !isQuerying) {
       e.preventDefault()
-      onSubmit(value.trim())
+      onSubmit()
     }
   }
 
   return (
-    <div style={{ marginBottom: '1.5rem' }}>
+    <div style={{ marginBottom: 16 }}>
       <textarea
-        value={value}
-        onChange={e => setValue(e.target.value)}
+        value={question}
+        onChange={e => onQuestionChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Ask a question about the codebase... (Enter to submit)"
-        disabled={loading}
+        placeholder="Ask anything about this codebase..."
+        disabled={isQuerying}
         rows={3}
         style={{
           width: '100%',
-          padding: '0.75rem',
-          fontSize: '1rem',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          color: 'var(--text-primary)',
+          padding: '8px 12px',
           fontFamily: 'inherit',
-          border: '1px solid #ccc',
-          borderRadius: '6px',
+          fontSize: '13px',
           resize: 'vertical',
-          boxSizing: 'border-box',
+          outline: 'none',
+        }}
+        onFocus={e => {
+          e.target.style.borderColor = 'var(--accent)'
+        }}
+        onBlur={e => {
+          e.target.style.borderColor = 'var(--border)'
         }}
       />
       <button
-        onClick={() => value.trim() && onSubmit(value.trim())}
-        disabled={loading || !value.trim()}
+        type="button"
+        onClick={() => question.trim() && onSubmit()}
+        disabled={isQuerying || !question.trim()}
         style={{
-          marginTop: '0.5rem',
-          padding: '0.5rem 1.25rem',
-          fontSize: '0.95rem',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          borderRadius: '6px',
+          width: '100%',
+          marginTop: 8,
+          background: 'var(--accent)',
+          color: 'white',
           border: 'none',
-          background: '#2563eb',
-          color: '#fff',
+          borderRadius: 'var(--radius)',
+          padding: '8px 16px',
+          cursor: isQuerying ? 'not-allowed' : 'pointer',
+          fontWeight: 600,
+          opacity: isQuerying ? 0.5 : 1,
+        }}
+        onMouseEnter={e => {
+          if (!isQuerying) (e.target as HTMLButtonElement).style.opacity = '0.85'
+        }}
+        onMouseLeave={e => {
+          (e.target as HTMLButtonElement).style.opacity = isQuerying ? '0.5' : '1'
         }}
       >
-        {loading ? 'Searching...' : 'Ask'}
+        {isQuerying ? 'Asking...' : 'Ask'}
       </button>
     </div>
   )
