@@ -73,6 +73,12 @@ class TestBuildPrompt:
         prompt, _ = build_prompt("query", results)
         assert "auth.py" in prompt
 
+    def test_prompt_fallback_rel_when_file_rel_path_empty(self):
+        results = [make_result(file_rel_path="", file_path="/repo/auth.py")]
+        prompt, labeled = build_prompt("query", results)
+        assert "repo/auth.py" in prompt
+        assert labeled[0]["file_rel_path"] == "repo/auth.py"
+
     def test_prompt_contains_line_numbers(self):
         results = [make_result(start_line=10, end_line=20)]
         prompt, _ = build_prompt("query", results)
@@ -141,6 +147,22 @@ class TestParseCitations:
         citations = parse_citations("[2] and [1].", labeled)
         assert citations[0]["label"] == "[1]"
         assert citations[1]["label"] == "[2]"
+
+    def test_parse_citations_normalizes_empty_file_rel_path(self):
+        labeled = [{
+            "label": "[1]",
+            "file_rel_path": "",
+            "file_path": "/abs/repo/pkg/mod.py",
+            "start_line": 1,
+            "end_line": 2,
+            "name": "foo",
+            "parent_class": None,
+        }]
+        citations = parse_citations("See [1].", labeled)
+        assert len(citations) == 1
+        assert citations[0]["file_rel_path"] == "pkg/mod.py"
+        assert "file_path" in citations[0]
+        assert citations[0]["name"] == "foo"
 
 
 class TestStripCitationsBlock:

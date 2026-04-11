@@ -133,6 +133,11 @@ user sees are 1-indexed.
 file_rel_path is computed at index time relative to repo root
 and stored as metadata. All citation output uses file_rel_path
 not file_path to avoid exposing absolute paths in user-facing output.
+If file_rel_path is missing or blank in stored metadata,
+display_rel_path_from_meta() in retriever.py derives a short path
+from the last two segments of file_path (never the full absolute
+path as the display value). build_prompt, parse_citations, the CLI,
+and the API chunk payload all use this helper.
 
 **LLM uses max_completion_tokens, not max_tokens.**
 gpt-5.4-mini requires max_completion_tokens. Using max_tokens
@@ -204,7 +209,7 @@ Hash IDs: "{absolute_file_path}"
 | repolix/walker.py | Complete | Filesystem traversal, file filtering |
 | repolix/chunker.py | Complete | AST parsing, chunk + metadata extraction, is_truncated flag |
 | repolix/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator |
-| repolix/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion |
+| repolix/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion; display_rel_path_from_meta for safe citation paths |
 | repolix/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing, CITATIONS block stripping |
 | repolix/cli.py | Complete | Click CLI — index and query commands, confidence label |
 | repolix/api.py | Complete | FastAPI backend — /index, /query, /status, /health; serves built SPA from frontend/dist |
@@ -223,13 +228,13 @@ the embedding logic lives in store.py as _embed_texts and build_embed_text.
 | tests/test_walker.py | 11 | Passing |
 | tests/test_chunker.py | 23 | Passing |
 | tests/test_store.py | 28 | Passing |
-| tests/test_retriever.py | 22 | Passing |
-| tests/test_llm.py | 21 | Passing |
+| tests/test_retriever.py | 25 | Passing |
+| tests/test_llm.py | 23 | Passing |
 | tests/test_cli.py | 12 | Passing |
 | tests/test_api.py | 9 | Passing |
 
 Run all tests: pytest tests/ -v
-Total: 142 passing
+Total: 147 passing
 
 Note: test counts above are approximate. Always trust the actual
 pytest output over this table.

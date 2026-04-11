@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from starlette.staticfiles import StaticFiles
 
 from repolix.store import index_repo
-from repolix.retriever import retrieve
+from repolix.retriever import retrieve, display_rel_path_from_meta
 from repolix.llm import answer_query
 
 load_dotenv()
@@ -210,7 +210,7 @@ async def query_endpoint(request: QueryRequest):
     chunks = [
         ChunkModel(
             source=r["source"],
-            file_rel_path=r.get("file_rel_path", r["file_path"]),
+            file_rel_path=display_rel_path_from_meta(r),
             name=r["name"],
             start_line=r["start_line"],
             end_line=r["end_line"],

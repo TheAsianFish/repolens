@@ -31,6 +31,30 @@ RETURN_N = 5
 RRF_K = 60
 
 
+def display_rel_path_from_meta(meta: dict) -> str:
+    """
+    User-facing relative path for citations and chunk listings.
+
+    Prefer file_rel_path from metadata; if missing or blank, derive a
+    short path from the last two components of file_path so absolute
+    paths never leak into display.
+    """
+    rel = (meta.get("file_rel_path") or "").strip()
+    if not rel:
+        parts = Path(meta.get("file_path", "unknown")).parts
+        rel = (
+            "/".join(parts[-2:])
+            if len(parts) >= 2
+            else meta.get("file_path", "unknown")
+        )
+    return rel
+
+
+def _display_rel_path(result: dict) -> str:
+    """Backward-compatible alias for format_results and internal use."""
+    return display_rel_path_from_meta(result)
+
+
 def retrieve(
     query: str,
     store_path: str | Path,
@@ -271,7 +295,7 @@ def format_results(results: list[dict]) -> str:
 
     lines: list[str] = []
     for i, result in enumerate(results, 1):
-        file_path = result["file_path"]
+        display_path = _display_rel_path(result)
         name = result["name"]
         start = result["start_line"]
         end = result["end_line"]
@@ -279,7 +303,7 @@ def format_results(results: list[dict]) -> str:
         source = result["source"]
 
         lines.append(f"── Result {i} ──────────────────────────────")
-        lines.append(f"File:     {file_path}")
+        lines.append(f"File:     {display_path}")
         lines.append(f"Function: {name}  (lines {start}–{end})")
         lines.append(f"Score:    {score:.4f}")
         lines.append("")

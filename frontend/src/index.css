@@ -82,6 +82,14 @@ code, pre, .mono {
   padding: 16px 20px;
 }
 
+.app-col.app-col-left {
+  padding: 16px;
+}
+
+.app-col.app-col-left > :not(:last-child) {
+  margin-bottom: 12px;
+}
+
 .app-col-right {
   border-left: 1px solid var(--border-subtle);
 }

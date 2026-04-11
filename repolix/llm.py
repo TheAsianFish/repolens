@@ -11,6 +11,8 @@ real file paths and line numbers after parsing the response.
 
 from openai import OpenAI
 
+from repolix.retriever import display_rel_path_from_meta
+
 LLM_MODEL = "gpt-5.4-mini"
 
 # Maximum chunks to send to the LLM. Set to 8 to include up to
@@ -66,7 +68,7 @@ def build_prompt(query: str, results: list[dict]) -> tuple[str, list[dict]]:
     chunk_blocks: list[str] = []
     for i, chunk in enumerate(chunks, 1):
         label = f"[{i}]"
-        file_rel = chunk.get("file_rel_path", chunk["file_path"])
+        file_rel = display_rel_path_from_meta(chunk)
         start = chunk["start_line"]
         end = chunk["end_line"]
         name = chunk["name"]
@@ -87,13 +89,13 @@ def build_prompt(query: str, results: list[dict]) -> tuple[str, list[dict]]:
         chunk_blocks.append(block)
         labeled.append({
             "label": label,
-            "file_path": chunk["file_path"],
+            "file_path": chunk.get("file_path") or "",
             "file_rel_path": file_rel,
             "start_line": start,
             "end_line": end,
             "name": name,
             "parent_class": parent,
-            "is_truncated": chunk.get("is_truncated", False),
+            "is_truncated": bool(chunk.get("is_truncated", False)),
         })
 
     chunks_text = "\n\n".join(chunk_blocks)
@@ -122,7 +124,8 @@ def parse_citations(response_text: str, labeled_chunks: list[dict]) -> list[dict
 
     Returns:
         List of citation dicts, each with:
-            label, file_rel_path, start_line, end_line, name.
+            label, file_rel_path, file_path, start_line, end_line, name,
+            parent_class, is_truncated (display_rel_path_from_meta applied).
         Ordered by label number, with no duplicates.
     """
     label_map = {c["label"]: c for c in labeled_chunks}
@@ -133,14 +136,16 @@ def parse_citations(response_text: str, labeled_chunks: list[dict]) -> list[dict
     for label in sorted(label_map.keys(), key=lambda x: int(x[1:-1])):
         if label in response_text:
             chunk = label_map[label]
+            display_rel = display_rel_path_from_meta(chunk)
             citations.append({
                 "label": label,
-                "file_rel_path": chunk["file_rel_path"],
-                "start_line": chunk["start_line"],
-                "end_line": chunk["end_line"],
-                "name": chunk["name"],
+                "file_rel_path": display_rel,
+                "file_path": chunk.get("file_path") or "",
+                "start_line": int(chunk.get("start_line", 0)),
+                "end_line": int(chunk.get("end_line", 0)),
+                "name": chunk.get("name") or "",
                 "parent_class": chunk.get("parent_class"),
-                "is_truncated": chunk.get("is_truncated", False),
+                "is_truncated": bool(chunk.get("is_truncated", False)),
             })
 
     return citations

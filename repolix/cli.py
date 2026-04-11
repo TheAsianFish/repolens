@@ -26,7 +26,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, T
 from rich.rule import Rule
 
 from repolix.store import index_repo
-from repolix.retriever import retrieve, format_results
+from repolix.retriever import retrieve, format_results, display_rel_path_from_meta
 from repolix.llm import answer_query
 
 # Load .env file if present. This must happen before any os.getenv
@@ -250,11 +250,7 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
     if output["citations"]:
         for citation in output["citations"]:
             label = citation["label"]
-            path = citation.get("file_rel_path") or ""
-            if not path:
-                # Fall back to last two path components of absolute path
-                parts = Path(citation.get("file_path", "")).parts
-                path = str(Path(*parts[-2:])) if len(parts) >= 2 else citation.get("file_path", "")
+            path = display_rel_path_from_meta(citation)
             start = citation["start_line"]
             end = citation["end_line"]
             name = citation["name"]

@@ -12,6 +12,7 @@ from repolix.retriever import (
     reciprocal_rank_fusion,
     rerank,
     format_results,
+    display_rel_path_from_meta,
     RETURN_N,
     RRF_K,
 )
@@ -167,6 +168,26 @@ class TestRetrieve:
         assert results[0]["name"] == "exact_match_func"
 
 
+# ── display_rel_path_from_meta ────────────────────────────────────────────────
+
+class TestDisplayRelPathFromMeta:
+
+    def test_uses_file_rel_path_when_present(self):
+        assert display_rel_path_from_meta(
+            {"file_rel_path": "pkg/mod.py", "file_path": "/abs/pkg/mod.py"}
+        ) == "pkg/mod.py"
+
+    def test_falls_back_to_last_two_path_parts_when_rel_empty(self):
+        assert display_rel_path_from_meta(
+            {"file_rel_path": "", "file_path": "/abs/repo/auth.py"}
+        ) == "repo/auth.py"
+
+    def test_falls_back_to_file_path_when_single_part(self):
+        assert display_rel_path_from_meta(
+            {"file_rel_path": "  ", "file_path": "auth.py"}
+        ) == "auth.py"
+
+
 # ── format_results ────────────────────────────────────────────────────────────
 
 class TestFormatResults:
@@ -174,9 +195,11 @@ class TestFormatResults:
     def test_empty_returns_no_results_message(self):
         assert "No results found" in format_results([])
 
-    def test_contains_file_path(self):
+    def test_shows_relative_or_short_path_not_absolute(self):
         r = rerank("q", [make_result(rrf_score=0.02)])[0]
-        assert "/repo/auth.py" in format_results([r])
+        out = format_results([r])
+        assert "repo/auth.py" in out
+        assert "/repo/auth.py" not in out
 
     def test_contains_function_name(self):
         r = rerank("q", [make_result(rrf_score=0.02)])[0]
