@@ -258,8 +258,10 @@ pytest output over this table.
 | 11 | Post-V1 output quality + UX fixes | Complete |
 | 12 | Rename codesight → repolix; publish to PyPI as repolix 0.1.0 | Complete |
 | 13 | Rich CLI output polish + LLM system prompt update | Complete |
+| 14 | repolix 0.2.0 — React UI polish, citation path fixes, loading states | Complete |
 
-V1 shipped as repolix 0.1.0 on PyPI. Post-V1 polish complete. Milestone 13 (Rich CLI) complete.
+V1 shipped as repolix 0.1.0 on PyPI. **0.2.0** bumps the package for the current
+React SPA and backend citation/display fixes. Milestone 13 (Rich CLI) complete.
 
 ---
 
@@ -316,6 +318,12 @@ These were identified after V1 ship and resolved before V2 work begins.
 ---
 
 ## PyPI release sequence
+
+**You cannot “update” a version already on PyPI.** Each upload must use a
+**new version number** in `pyproject.toml` (e.g. patch `0.1.1` for fixes only,
+or `0.2.0` for a minor release with new behavior). Old wheels/sdists stay
+forever on the index. A CHANGELOG file is optional; PyPI shows **README.md**
+on the project page. For this repo, keeping **CONTEXT.md** current is enough unless you want a public `CHANGELOG.md`.
 
 Run these steps in order before every release:
 
