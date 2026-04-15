@@ -32,11 +32,13 @@ IGNORED_DIRS = {
     "vendor",
 }
 
-# File extensions we index in V1. Python only.
-# Expanding to TypeScript in V2 means adding ".ts" and ".tsx" here
-# and registering the Tree-sitter TypeScript grammar in chunker.py.
+# File extensions we index. Python + JavaScript/TypeScript.
 ALLOWED_EXTENSIONS = {
     ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
 }
 
 # Hard cap on individual file size. Files above this threshold are
