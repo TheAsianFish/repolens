@@ -259,6 +259,7 @@ pytest output over this table.
 | 12 | Rename codesight → repolix; publish to PyPI as repolix 0.1.0 | Complete |
 | 13 | Rich CLI output polish + LLM system prompt update | Complete |
 | 14 | repolix 0.1.1 — React UI polish, citation path fixes, loading states | Complete |
+| 15 | V2-1: JavaScript and TypeScript indexing support | Complete |
 
 V1 shipped as repolix 0.1.0 on PyPI. **0.1.1** is a patch release (bugfixes and
 UI polish, same major/minor line as 0.1.0). Milestone 13 (Rich CLI) complete.
@@ -342,9 +343,30 @@ Test on TestPyPI first: twine upload --repository testpypi dist/*
 
 ---
 
+---
+
+## Milestone 15 — V2-1: JavaScript and TypeScript indexing
+
+| Change | Files |
+|---|---|
+| Add .ts, .tsx, .js, .jsx to ALLOWED_EXTENSIONS | repolix/walker.py |
+| Add EXTENSION_TO_LANGUAGE mapping | repolix/chunker.py |
+| Replace _PARSER singleton with _PARSER_CACHE dict keyed by language | repolix/chunker.py |
+| Add _get_cached_parser(language) helper using tree-sitter-javascript and tree-sitter-typescript | repolix/chunker.py |
+| Add _extract_js_calls, _extract_js_name_from_parent, _handle_js_node helpers | repolix/chunker.py |
+| Extend _walk_tree to dispatch to Python or JS/TS handlers based on language param | repolix/chunker.py |
+| chunk_file returns [] for unknown extensions instead of raising ValueError | repolix/chunker.py |
+| Add tree-sitter-javascript and tree-sitter-typescript to dependencies | pyproject.toml |
+| Add TestJsChunking test class (12 tests); update test_raises_on_non_python_file | tests/test_chunker.py |
+| JS/TS node types chunked: function_declaration, arrow_function, function_expression, class_declaration, method_definition | repolix/chunker.py |
+| docstring="" for all JS/TS chunks (JSDoc extraction out of scope for V2-1) | repolix/chunker.py |
+| tsx extension maps to separate "tsx" language key to select language_tsx() grammar | repolix/chunker.py |
+
+---
+
 ## V2 Roadmap
 
-- TypeScript / JavaScript support (Tree-sitter parser swap)
+- TypeScript / JavaScript support (Tree-sitter parser swap) ✓ Done in V2-1
 - VS Code extension wrapper
 - Dependency graph visualization
 - "Start here" guide auto-generated for new engineers
