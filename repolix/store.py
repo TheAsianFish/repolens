@@ -69,23 +69,28 @@ def hash_file(file_path: str | Path) -> str:
     return hashlib.sha256(Path(file_path).read_bytes()).hexdigest()
 
 
-def build_embed_text(chunk: Chunk) -> str:
+def build_embed_text(chunk: Chunk, file_rel_path: str = "") -> str:
     """
-    Build the text we send to OpenAI for embedding.
+    Build the text we send to OpenAI for embedding and store as the
+    searchable document in ChromaDB.
 
-    We enrich beyond raw source code by prepending the function or
-    class name and docstring when available. This improves retrieval
-    because natural language queries map better to natural language
-    descriptions than to raw syntax alone.
+    We enrich beyond raw source code by prepending the file path,
+    function or class name, and docstring when available. Storing this
+    enriched text as the ChromaDB document means keyword search can
+    find chunks by file name (e.g. "chunker") or function name even
+    when those strings don't appear in the raw source body.
 
-    Example output for a documented function:
-        function: authenticate_user
-        Validates user credentials and returns a session token.
+    Example output for a documented function in repolix/chunker.py:
+        file: repolix/chunker.py
+        function: chunk_file
+        Parse a Python file and return a list of Chunk objects.
 
-        def authenticate_user(token: str) -> Session:
+        def chunk_file(file_path: str | Path) -> list[Chunk]:
             ...
     """
     parts: list[str] = []
+    if file_rel_path:
+        parts.append(f"file: {file_rel_path}")
     parts.append(f"{chunk.node_type.replace('_definition', '')}: {chunk.name}")
     if chunk.docstring:
         parts.append(chunk.docstring)
@@ -146,6 +151,11 @@ def chunk_to_metadata(chunk: Chunk, repo_root: str | None = None) -> dict:
         "docstring": chunk.docstring or "",
         "parent_class": chunk.parent_class or "",
         "is_truncated": chunk.is_truncated,
+        # Raw source stored separately so query_chunks and keyword_search
+        # can return clean source for display while ChromaDB documents
+        # hold the enriched text (file path + name + docstring + source)
+        # that enables keyword search to find chunks by file/function name.
+        "source_text": chunk.source,
     }
 
 
@@ -211,8 +221,22 @@ def index_chunks(
         )
         return {"skipped": False, "indexed": 0}
 
+    # Compute the relative path once for all chunks in this file.
+    # Used to prefix the enriched document text so keyword search can
+    # find chunks by file name (e.g. "chunker" finds chunker.py functions).
+    if repo_root:
+        try:
+            embed_rel_path = str(Path(file_path).relative_to(repo_root))
+        except ValueError:
+            embed_rel_path = file_path
+    else:
+        embed_rel_path = file_path
+
     # Build enriched embed texts and get embeddings from OpenAI.
-    texts = [build_embed_text(c) for c in chunks]
+    # The same enriched text is stored as the ChromaDB document so that
+    # keyword search (which uses $contains on the document) benefits from
+    # the file path, function name, and docstring — not just raw source.
+    texts = [build_embed_text(c, file_rel_path=embed_rel_path) for c in chunks]
     embeddings = _embed_texts(texts, openai_client)
 
     # Generate stable IDs. We use file_path + start_line so IDs are
@@ -221,7 +245,7 @@ def index_chunks(
 
     chunks_col.add(
         ids=ids,
-        documents=[c.source for c in chunks],
+        documents=texts,
         embeddings=embeddings,
         metadatas=[chunk_to_metadata(c, repo_root=repo_root) for c in chunks],
     )
@@ -278,6 +302,9 @@ def query_chunks(
     )
 
     # Flatten ChromaDB's nested response structure into a clean list.
+    # Use source_text from metadata (raw source) rather than the document
+    # (enriched text with file path/name prefix) so callers display and
+    # send clean code to the LLM. Fall back to doc for old index entries.
     output: list[dict] = []
     for doc, meta, dist in zip(
         results["documents"][0],
@@ -285,7 +312,7 @@ def query_chunks(
         results["distances"][0],
     ):
         output.append({
-            "source": doc,
+            "source": meta.get("source_text") or doc,
             "file_path": meta["file_path"],
             "file_rel_path": meta.get("file_rel_path", meta["file_path"]),
             "name": meta["name"],
@@ -360,7 +387,7 @@ def keyword_search(
             key = f"{meta['file_path']}:{meta['start_line']}"
             match_counts[key] = match_counts.get(key, 0) + 1
             result_map[key] = {
-                "source": doc,
+                "source": meta.get("source_text") or doc,
                 "file_path": meta["file_path"],
                 "name": meta["name"],
                 "node_type": meta["node_type"],
