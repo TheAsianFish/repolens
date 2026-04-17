@@ -1,6 +1,12 @@
 # repolix
 
+[![PyPI version](https://badge.fury.io/py/repolix.svg)](https://pypi.org/project/repolix/)
+
 **Ask plain English questions about any Python, JavaScript, or TypeScript codebase. Get answers with exact file and line citations. Runs entirely on your machine.**
+
+## Preview
+
+![Repolix preview](docs/images/preview.png)
 
 ```
 $ repolix index ./myrepo
@@ -47,8 +53,6 @@ Your code never leaves your machine. No server. No accounts beyond an OpenAI API
 ```bash
 pip install repolix
 ```
-
-Latest PyPI release: **0.2.0** (Python plus JavaScript/TypeScript indexing).
 
 ### Set your API key
 
@@ -179,9 +183,15 @@ bash start.sh
 
 ## Roadmap
 
-**V2** — VS Code extension, dependency graph visualization (JavaScript/TypeScript indexing shipped in 0.2.0)
+**Next in V2**
+- `repolix tour` — proactive orientation briefing for unfamiliar repos
+- `repolix trace` — call graph traversal for any named function
+- Local model support via Ollama (zero API cost, fully air-gapped)
+- Persistent query sessions across terminal restarts
 
-**V3** — GitHub webhook re-indexing, multi-repo support, Slack bot
+**Considering for V3**
+- VS Code extension
+- Multi-repo support
 
 ---
 
