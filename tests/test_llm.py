@@ -12,6 +12,7 @@ from repolix.llm import (
     parse_citations,
     answer_query,
     _strip_citations_block,
+    _parse_sections,
     MAX_CONTEXT_CHUNKS,
 )
 
@@ -31,6 +32,7 @@ def make_result(**kwargs) -> dict:
         distance=0.2,
         rrf_score=0.02,
         rerank_score=0.32,
+        score=0.5,
     )
     defaults.update(kwargs)
     return defaults
@@ -247,3 +249,78 @@ class TestAnswerQuery:
         call_kwargs = client.chat.completions.create.call_args.kwargs
         assert "max_completion_tokens" in call_kwargs
         assert call_kwargs["max_completion_tokens"] == 1024
+
+
+class TestParseSections:
+
+    def test_parse_sections_full_structure(self):
+        text = (
+            "**Answer:** Auth is handled in auth.py by authenticate_user [1].\n\n"
+            "**How it works:** The function validates a JWT token against a secret key. "
+            "It raises AuthError on failure so callers get a clear exception rather than "
+            "a boolean, making misuse harder [1].\n\n"
+            "**Where to look next:** Check validate_token in token.py for the low-level "
+            "verification logic."
+        )
+        sections = _parse_sections(text)
+        assert sections["answer"] is not None
+        assert "authenticate_user" in sections["answer"]
+        assert sections["how_it_works"] is not None
+        assert "JWT" in sections["how_it_works"]
+        assert sections["where_to_look"] is not None
+        assert "validate_token" in sections["where_to_look"]
+
+    def test_parse_sections_no_where_to_look(self):
+        text = (
+            "**Answer:** Truncation happens in store.py inside _truncate_source [1].\n\n"
+            "**How it works:** It splits the source on newlines and rejoins the first "
+            "MAX_LINES, appending a comment marker so readers know the code was cut."
+        )
+        sections = _parse_sections(text)
+        assert sections["answer"] is not None
+        assert sections["how_it_works"] is not None
+        assert sections["where_to_look"] is None
+
+    def test_parse_sections_fallback(self):
+        plain = "This is just plain prose with no headers at all."
+        sections = _parse_sections(plain)
+        assert sections["answer"] == plain
+        assert sections["how_it_works"] is None
+        assert sections["where_to_look"] is None
+
+
+class TestAnswerQueryConfidence:
+
+    def test_answer_query_low_confidence(self):
+        client = mock_openai("Should not be called.")
+        results = [make_result(score=0.05)]
+        output = answer_query("query", results, client)
+        assert output["answer"] is None
+        assert output["confidence"] == "low"
+        assert output["navigation"] is not None
+        assert client.chat.completions.create.call_count == 0
+
+    def test_answer_query_medium_confidence_injects_caution(self):
+        structured = (
+            "**Answer:** Auth lives in auth.py [1].\n\n"
+            "**How it works:** It calls validate_token which checks a JWT.\n\n"
+            "CITATIONS\n[1] auth.py:1-2 (authenticate_user)"
+        )
+        client = mock_openai(structured)
+        results = [make_result(score=0.25)]
+        answer_query("query", results, client)
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        system_msg = call_kwargs["messages"][0]["content"]
+        assert "Retrieval confidence is moderate" in system_msg
+
+    def test_answer_query_returns_sections(self):
+        structured = (
+            "**Answer:** Auth lives in auth.py [1].\n\n"
+            "**How it works:** It validates a JWT token using a secret key [1].\n\n"
+            "CITATIONS\n[1] auth.py:1-2 (authenticate_user)"
+        )
+        client = mock_openai(structured)
+        results = [make_result(score=0.5)]
+        output = answer_query("query", results, client)
+        assert output["answer_sections"]["answer"] is not None
+        assert output["answer_sections"]["how_it_works"] is not None
