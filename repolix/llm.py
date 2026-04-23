@@ -255,23 +255,73 @@ def answer_query(
 
     Returns:
         Dict with keys:
-            answer: str — the LLM's response text
+            answer: str | None — the LLM's response text (None if low confidence)
+            answer_sections: dict | None — parsed sections from response
             citations: list[dict] — resolved citation objects
             chunks_used: int — number of chunks sent to LLM
+            confidence: str — "high", "medium", or "low"
+            navigation: dict | None — navigational hints when confidence is low
     """
     if not results:
         return {
             "answer": "No relevant code found for this query.",
+            "answer_sections": None,
             "citations": [],
             "chunks_used": 0,
+            "confidence": "low",
+            "navigation": None,
         }
+
+    # --- Confidence gate ---
+    top_score = results[0].get("score", 0.0) if results else 0.0
+
+    if top_score < 0.15:
+        # Low confidence: skip LLM entirely.
+        # Return navigational response with closest matches.
+        closest = []
+        for r in results[:3]:
+            closest.append({
+                "name": r.get("name", ""),
+                "file_rel_path": display_rel_path_from_meta(r),
+                "start_line": r.get("start_line", 0),
+            })
+        return {
+            "answer": None,
+            "answer_sections": None,
+            "citations": [],
+            "chunks_used": 0,
+            "confidence": "low",
+            "navigation": {
+                "message": (
+                    "Retrieval confidence is too low to answer "
+                    "reliably. Here are the closest matches found:"
+                ),
+                "closest_matches": closest,
+                "suggestions": [
+                    "Try rephrasing with the exact function or "
+                    "class name you are looking for.",
+                    "If you know the file, include it in your query "
+                    "e.g. 'in store.py, how does...'",
+                ],
+            },
+        }
+
+    # Medium confidence: proceed but inject caution into prompt.
+    system_prompt = SYSTEM_PROMPT
+    if top_score < 0.4:
+        system_prompt = SYSTEM_PROMPT + (
+            "\n\nNote: Retrieval confidence is moderate for this "
+            "query. Only make claims you can directly support from "
+            "the provided chunks. If uncertain, guide the developer "
+            "toward what to look for next rather than speculating."
+        )
 
     prompt, labeled_chunks = build_prompt(query, results)
 
     response = openai_client.chat.completions.create(
         model=LLM_MODEL,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         temperature=0.1,
@@ -289,9 +339,17 @@ def answer_query(
     # citation objects above. Removing it here fixes both in one place
     # and frees output tokens for actual answer content.
     answer_text = _strip_citations_block(response_text)
+    answer_sections = _parse_sections(answer_text)
 
     return {
         "answer": answer_text,
+        "answer_sections": answer_sections,
         "citations": citations,
         "chunks_used": len(labeled_chunks),
+        "confidence": (
+            "high" if top_score >= 0.4
+            else "medium" if top_score >= 0.15
+            else "low"
+        ),
+        "navigation": None,
     }
