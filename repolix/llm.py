@@ -186,6 +186,59 @@ def _strip_citations_block(text: str) -> str:
     return text
 
 
+def _parse_sections(answer_text: str) -> dict:
+    """
+    Parse the structured LLM response into named sections.
+
+    Expects bold markdown headers: **Answer:**, **How it works:**,
+    **Where to look next:** (optional). Strips the header from
+    each section's content.
+
+    Returns a dict with keys:
+        answer: str — the direct answer (always present)
+        how_it_works: str | None — the mechanism explanation
+        where_to_look: str | None — navigational suggestion if partial
+
+    Falls back gracefully: if structure is not found, puts the
+    full text in answer and leaves other keys as None. This handles
+    cases where the LLM does not follow the format exactly.
+    """
+    import re
+
+    sections = {
+        "answer": answer_text,
+        "how_it_works": None,
+        "where_to_look": None,
+    }
+
+    # Match bold headers case-insensitively, with optional whitespace.
+    # We split on any **Header:** pattern to find section boundaries.
+    pattern = re.compile(
+        r"\*\*(Answer|How it works|Where to look next):\*\*",
+        re.IGNORECASE
+    )
+
+    matches = list(pattern.finditer(answer_text))
+    if not matches:
+        # LLM did not follow format — return full text as answer
+        return sections
+
+    for i, match in enumerate(matches):
+        header = match.group(1).lower().strip()
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(answer_text)
+        content = answer_text[start:end].strip()
+
+        if "answer" in header and "look" not in header:
+            sections["answer"] = content
+        elif "how" in header:
+            sections["how_it_works"] = content
+        elif "look" in header:
+            sections["where_to_look"] = content
+
+    return sections
+
+
 def answer_query(
     query: str,
     results: list[dict],
