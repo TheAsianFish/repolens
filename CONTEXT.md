@@ -229,12 +229,12 @@ the embedding logic lives in store.py as _embed_texts and build_embed_text.
 | tests/test_chunker.py | 23 | Passing |
 | tests/test_store.py | 28 | Passing |
 | tests/test_retriever.py | 25 | Passing |
-| tests/test_llm.py | 23 | Passing |
+| tests/test_llm.py | 36 | Passing |
 | tests/test_cli.py | 12 | Passing |
 | tests/test_api.py | 9 | Passing |
 
 Run all tests: pytest tests/ -v
-Total: 159 passing
+Total: 165 passing
 
 Note: test counts above are approximate. Always trust the actual
 pytest output over this table.
@@ -262,11 +262,12 @@ pytest output over this table.
 | 15 | V2-1: JavaScript and TypeScript indexing support | Complete |
 | 16 | repolix 0.2.0 — PyPI minor release shipping JS/TS indexing | Complete |
 | 17 | repolix 0.2.1 — Web UI same-origin fetches, CORS localhost/127.0.0.1, VITE_API_URL | Complete |
+| 18 | LLM output layer: structured response format, section parsing, confidence gating | Complete |
 
 V1 shipped as repolix 0.1.0 on PyPI; **0.1.1** followed (UI polish and fixes).
 **0.2.1** is the current line: **0.2.0** plus `.ts`, `.tsx`, `.js`, `.jsx` indexing
 and web UI fixes for bundled SPA (any `--port`) and dev (`VITE_API_URL`).
-Milestone 15 (JS/TS indexing) complete.
+Milestone 18 (LLM output quality) complete.
 
 ---
 
@@ -365,6 +366,22 @@ Test on TestPyPI first: twine upload --repository testpypi dist/*
 | JS/TS node types chunked: function_declaration, arrow_function, function_expression, class_declaration, method_definition | repolix/chunker.py |
 | docstring="" for all JS/TS chunks (JSDoc extraction out of scope for V2-1) | repolix/chunker.py |
 | tsx extension maps to separate "tsx" language key to select language_tsx() grammar | repolix/chunker.py |
+
+---
+
+## Milestone 18 — LLM output layer: structured response, section parsing, confidence gating
+
+| Change | Files |
+|---|---|
+| Replace SYSTEM_PROMPT: senior engineer persona, bold-header structure (Answer/How it works/Where to look next) | repolix/llm.py |
+| Add _parse_sections(): splits response on **Header:** boundaries; graceful fallback to full text | repolix/llm.py |
+| Add confidence gating to answer_query(): reads results[0]["score"]; skips LLM when score < 0.15 | repolix/llm.py |
+| Low-confidence path returns navigation dict with closest_matches and rephrasing suggestions | repolix/llm.py |
+| Medium-confidence path (0.15–0.4) appends caution note to system prompt | repolix/llm.py |
+| answer_query() now returns answer_sections, confidence, and navigation alongside existing keys | repolix/llm.py |
+| Add score=0.5 default to make_result() so existing tests remain high-confidence | tests/test_llm.py |
+| Add TestParseSections: full structure, no where_to_look, plain-prose fallback | tests/test_llm.py |
+| Add TestAnswerQueryConfidence: low confidence (zero API calls), medium caution injection, sections returned | tests/test_llm.py |
 
 ---
 
