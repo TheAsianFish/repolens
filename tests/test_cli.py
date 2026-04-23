@@ -152,6 +152,11 @@ class TestQueryCommand:
 
         mock_answer = {
             "answer": "foo does something [1].",
+            "answer_sections": {
+                "answer": "foo does something [1].",
+                "how_it_works": "It returns True immediately.",
+                "where_to_look": None,
+            },
             "citations": [{
                 "label": "[1]",
                 "file_rel_path": "foo.py",
@@ -161,6 +166,8 @@ class TestQueryCommand:
                 "parent_class": None,
             }],
             "chunks_used": 1,
+            "confidence": "high",
+            "navigation": None,
         }
 
         with patch("repolix.cli.get_openai_client"), \
@@ -172,5 +179,53 @@ class TestQueryCommand:
                 ["query", "what does foo do", "--repo", str(tmp_path)]
             )
             assert "Answer" in result.output
+            assert "How it works" in result.output
             assert "Citations" in result.output
             assert "confidence:" in result.output
+
+    def test_query_low_confidence_renders_navigation(self, tmp_path):
+        store = tmp_path / ".repolix"
+        store.mkdir()
+        (store / "chroma.sqlite3").touch()
+
+        mock_results = [{
+            "source": "def foo(): pass",
+            "file_path": str(tmp_path / "foo.py"),
+            "file_rel_path": "foo.py",
+            "name": "foo",
+            "node_type": "function_definition",
+            "start_line": 1,
+            "end_line": 1,
+            "calls": [],
+            "docstring": None,
+            "parent_class": None,
+            "distance": 0.9,
+            "rrf_score": 0.01,
+            "rerank_score": 0.05,
+        }]
+
+        mock_answer = {
+            "answer": None,
+            "answer_sections": None,
+            "citations": [],
+            "chunks_used": 0,
+            "confidence": "low",
+            "navigation": {
+                "message": "Retrieval confidence is too low to answer reliably. Here are the closest matches found:",
+                "closest_matches": [{"name": "foo", "file_rel_path": "foo.py", "start_line": 1}],
+                "suggestions": ["Try rephrasing with the exact function name."],
+            },
+        }
+
+        with patch("repolix.cli.get_openai_client"), \
+             patch("repolix.cli.retrieve", return_value=mock_results), \
+             patch("repolix.cli.answer_query", return_value=mock_answer):
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                ["query", "nonexistent thing", "--repo", str(tmp_path)]
+            )
+            assert "Low Confidence" in result.output
+            assert "foo" in result.output
+            assert "confidence: low" in result.output
+            assert "Citations" not in result.output
