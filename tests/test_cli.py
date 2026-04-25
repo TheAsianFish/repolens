@@ -32,10 +32,10 @@ class TestConfidenceLabel:
 
     def test_medium_confidence_in_range(self):
         assert _confidence_label(0.3) == "medium"
-        assert _confidence_label(0.15) == "medium"
+        assert _confidence_label(0.05) == "medium"
 
     def test_low_confidence_below_threshold(self):
-        assert _confidence_label(0.1) == "low"
+        assert _confidence_label(0.04) == "low"
         assert _confidence_label(0.0) == "low"
 
     def test_boundary_at_0_4_is_high(self):

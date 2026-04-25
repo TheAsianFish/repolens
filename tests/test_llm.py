@@ -293,7 +293,7 @@ class TestAnswerQueryConfidence:
 
     def test_answer_query_low_confidence(self):
         client = mock_openai("Should not be called.")
-        results = [make_result(score=0.05)]
+        results = [make_result(rerank_score=0.04, score=0.04)]
         output = answer_query("query", results, client)
         assert output["answer"] is None
         assert output["confidence"] == "low"
