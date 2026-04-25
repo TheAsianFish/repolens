@@ -291,14 +291,15 @@ class TestParseSections:
 
 class TestAnswerQueryConfidence:
 
-    def test_answer_query_low_confidence(self):
-        client = mock_openai("Should not be called.")
+    def test_answer_query_low_score_still_calls_llm(self):
+        # Any non-empty result set proceeds to the LLM regardless of score.
+        client = mock_openai("Auth happens in [1].")
         results = [make_result(rerank_score=0.04, score=0.04)]
         output = answer_query("query", results, client)
-        assert output["answer"] is None
+        assert output["answer"] is not None
         assert output["confidence"] == "low"
-        assert output["navigation"] is not None
-        assert client.chat.completions.create.call_count == 0
+        assert output["navigation"] is None
+        assert client.chat.completions.create.call_count == 1
 
     def test_answer_query_medium_confidence_injects_caution(self):
         structured = (

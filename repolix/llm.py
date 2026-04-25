@@ -255,12 +255,12 @@ def answer_query(
 
     Returns:
         Dict with keys:
-            answer: str | None — the LLM's response text (None if low confidence)
+            answer: str — the LLM's response text
             answer_sections: dict | None — parsed sections from response
             citations: list[dict] — resolved citation objects
             chunks_used: int — number of chunks sent to LLM
             confidence: str — "high", "medium", or "low"
-            navigation: dict | None — navigational hints when confidence is low
+            navigation: None — reserved; always None (LLM is called for any non-empty result)
     """
     if not results:
         return {
@@ -272,40 +272,8 @@ def answer_query(
             "navigation": None,
         }
 
-    # --- Confidence gate ---
     # Retriever produces rerank_score; "score" is accepted for test compatibility.
     top_score = results[0].get("rerank_score", results[0].get("score", 0.0)) if results else 0.0
-
-    if top_score < 0.05:
-        # Low confidence: skip LLM entirely.
-        # Return navigational response with closest matches.
-        closest = []
-        for r in results[:3]:
-            closest.append({
-                "name": r.get("name", ""),
-                "file_rel_path": display_rel_path_from_meta(r),
-                "start_line": r.get("start_line", 0),
-            })
-        return {
-            "answer": None,
-            "answer_sections": None,
-            "citations": [],
-            "chunks_used": 0,
-            "confidence": "low",
-            "navigation": {
-                "message": (
-                    "Retrieval confidence is too low to answer "
-                    "reliably. Here are the closest matches found:"
-                ),
-                "closest_matches": closest,
-                "suggestions": [
-                    "Try rephrasing with the exact function or "
-                    "class name you are looking for.",
-                    "If you know the file, include it in your query "
-                    "e.g. 'in store.py, how does...'",
-                ],
-            },
-        }
 
     # Medium confidence: proceed but inject caution into prompt.
     system_prompt = SYSTEM_PROMPT
