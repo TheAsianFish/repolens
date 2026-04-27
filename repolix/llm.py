@@ -9,6 +9,8 @@ LLM is instructed to use inline. We map those labels back to
 real file paths and line numbers after parsing the response.
 """
 
+import re
+
 from openai import OpenAI
 
 from repolix.retriever import display_rel_path_from_meta
@@ -203,8 +205,6 @@ def _parse_sections(answer_text: str) -> dict:
     full text in answer and leaves other keys as None. This handles
     cases where the LLM does not follow the format exactly.
     """
-    import re
-
     sections = {
         "answer": answer_text,
         "how_it_works": None,
@@ -237,6 +237,117 @@ def _parse_sections(answer_text: str) -> dict:
             sections["where_to_look"] = content
 
     return sections
+
+
+TOUR_SYSTEM_PROMPT = """You are a senior engineer orienting a new
+developer to an unfamiliar codebase. You have been given a
+structural analysis of the repository including the most
+architecturally significant functions and entry points.
+
+Produce a concise orientation briefing in exactly this structure.
+Do not add extra sections. Use the exact header names shown.
+
+OVERVIEW
+[2-3 sentences. What does this repo do? What problem does it solve?
+Infer from the function names, file names, and docstrings provided.]
+
+ENTRY POINTS
+[Where does execution start? Name the specific file and function.
+If multiple entry points exist, list each on its own line.]
+
+MAJOR MODULES
+[One sentence per significant file describing its responsibility.
+Only include files represented in the provided chunks.]
+
+KEY ABSTRACTIONS
+[The 2-3 most important functions or classes and why they are
+central to the architecture. Reference inbound call counts.]
+
+START HERE
+[Recommended reading order for a developer new to this codebase.
+Name 3-5 specific files in order, with one sentence each on why.]
+
+Rules:
+- Be specific. Name actual files and functions from the chunks.
+- Do not say "based on the provided context" or "from the analysis".
+- Write as if you know this codebase well.
+- Keep the entire briefing under 400 words.
+- Do not include a CITATIONS block.
+"""
+
+
+def answer_tour(context: str, openai_client: OpenAI) -> dict:
+    """
+    Call the LLM with the tour context and parse the response
+    into named sections.
+
+    Args:
+        context: Formatted string from build_tour_context().
+        openai_client: Initialized OpenAI client.
+
+    Returns:
+        Dict with keys:
+            briefing: str — full response text
+            briefing_sections: dict with keys:
+                overview, entry_points, major_modules,
+                key_abstractions, start_here
+                Each is str | None.
+    """
+    response = openai_client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {"role": "system", "content": TOUR_SYSTEM_PROMPT},
+            {"role": "user", "content": context},
+        ],
+        temperature=0.2,
+        max_completion_tokens=1024,
+    )
+
+    briefing = response.choices[0].message.content or ""
+
+    section_keys = [
+        "OVERVIEW",
+        "ENTRY POINTS",
+        "MAJOR MODULES",
+        "KEY ABSTRACTIONS",
+        "START HERE",
+    ]
+
+    pattern = re.compile(
+        r"^(" + "|".join(re.escape(k) for k in section_keys) + r")\s*$",
+        re.MULTILINE | re.IGNORECASE,
+    )
+
+    matches = list(pattern.finditer(briefing))
+    sections: dict[str, str | None] = {
+        "overview": None,
+        "entry_points": None,
+        "major_modules": None,
+        "key_abstractions": None,
+        "start_here": None,
+    }
+
+    key_map = {
+        "OVERVIEW": "overview",
+        "ENTRY POINTS": "entry_points",
+        "MAJOR MODULES": "major_modules",
+        "KEY ABSTRACTIONS": "key_abstractions",
+        "START HERE": "start_here",
+    }
+
+    for i, match in enumerate(matches):
+        header = match.group(1).upper().strip()
+        start = match.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(briefing)
+        content = briefing[start:end].strip()
+        key = key_map.get(header)
+        if key:
+            sections[key] = content
+
+    return {
+        "briefing": briefing,
+        "briefing_sections": sections,
+    }
 
 
 def answer_query(

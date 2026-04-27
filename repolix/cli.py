@@ -345,3 +345,102 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
             console.print("  No citations extracted.")
 
     console.print(f"\n[dim]confidence: {escape(output.get('confidence', 'low'))}[/dim]")
+
+
+@main.command()
+@click.argument(
+    "repo_path",
+    type=click.Path(exists=True, file_okay=False),
+    default=".",
+)
+@click.option(
+    "--store",
+    default=None,
+    help="Path to ChromaDB store directory. Defaults to <repo>/.repolix/",
+)
+@click.option(
+    "--path",
+    "scope_path",
+    default=None,
+    help="Scope the tour to a subdirectory. e.g. --path src/payments",
+)
+@click.option(
+    "--save",
+    is_flag=True,
+    default=False,
+    help="Save the briefing to .repolix/tour.md",
+)
+def tour(repo_path: str, store: str | None, scope_path: str | None, save: bool):
+    """
+    Generate a proactive orientation briefing for a repository.
+
+    Analyzes the indexed codebase structure and produces a plain-English
+    briefing covering entry points, major modules, and key abstractions.
+
+    The repo must be indexed first: repolix index <repo_path>
+
+    Examples:
+      repolix tour .
+      repolix tour . --path src/payments
+      repolix tour . --save
+    """
+    from repolix.tour import generate_tour
+    from rich.text import Text
+
+    console = Console(highlight=False)
+    repo = Path(repo_path).resolve()
+    client = get_openai_client()
+    store_path = resolve_store_path(repo, store)
+
+    scope_display = f" ({scope_path})" if scope_path else ""
+    console.print(f"[dim]Generating tour{scope_display}...[/dim]")
+
+    result = generate_tour(
+        store_path=store_path,
+        repo_path=repo,
+        openai_client=client,
+        path_prefix=scope_path,
+    )
+
+    if result["error"]:
+        raise click.ClickException(result["error"])
+
+    sections = result.get("briefing_sections", {})
+
+    section_display = [
+        ("OVERVIEW", sections.get("overview"), "bold white"),
+        ("ENTRY POINTS", sections.get("entry_points"), "default"),
+        ("MAJOR MODULES", sections.get("major_modules"), "default"),
+        ("KEY ABSTRACTIONS", sections.get("key_abstractions"), "default"),
+        ("START HERE", sections.get("start_here"), "dim"),
+    ]
+
+    content = Text()
+    for header, body, style in section_display:
+        if body:
+            content.append(f"{header}\n", style="dim cyan")
+            content.append(f"{body}\n\n", style=style)
+
+    console.print(Panel(
+        content,
+        title="[bold cyan]Tour[/bold cyan]",
+        border_style="cyan",
+    ))
+
+    top = result.get("top_functions", [])
+    if top:
+        console.print(Rule("[dim]Most Referenced[/dim]", style="dim"))
+        for name, count in top:
+            console.print(
+                f"  [bold]{name}[/bold]  "
+                f"[dim]called by {count} functions[/dim]"
+            )
+
+    console.print(
+        f"\n[dim]Analyzed {result['chunk_count']} chunks[/dim]"
+    )
+
+    if save:
+        save_path = store_path / "tour.md"
+        save_path.write_text(result["briefing"] or "")
+        console.print(f"[dim]Saved to {save_path}[/dim]")

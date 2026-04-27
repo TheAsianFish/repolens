@@ -148,6 +148,20 @@ class StatusResponse(BaseModel):
     repo_path: str
 
 
+class TourRequest(BaseModel):
+    repo_path: str
+    path_prefix: str | None = None
+
+
+class TourResponse(BaseModel):
+    briefing: str | None
+    briefing_sections: dict | None
+    entry_points: list[dict]
+    top_functions: list[list]
+    chunk_count: int
+    error: str | None
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.post("/index", response_model=IndexResponse)
@@ -247,6 +261,26 @@ async def query_endpoint(request: QueryRequest):
         chunks=chunks,
         chunks_used=output["chunks_used"],
     )
+
+
+@app.post("/tour", response_model=TourResponse)
+def tour_endpoint(req: TourRequest):
+    """
+    Generate a proactive orientation briefing for an indexed repository.
+
+    Analyzes chunk metadata in ChromaDB (no vector search, no embeddings)
+    and produces a structured briefing via a single LLM call.
+    """
+    from repolix.tour import generate_tour
+    repo_path = Path(req.repo_path).resolve()
+    store_path = repo_path / ".repolix"
+    result = generate_tour(
+        store_path=store_path,
+        repo_path=repo_path,
+        openai_client=get_openai_client(),
+        path_prefix=req.path_prefix,
+    )
+    return TourResponse(**result)
 
 
 @app.get("/status", response_model=StatusResponse)
