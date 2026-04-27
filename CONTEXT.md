@@ -211,8 +211,9 @@ Hash IDs: "{absolute_file_path}"
 | repolix/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator |
 | repolix/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion; display_rel_path_from_meta for safe citation paths |
 | repolix/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing, CITATIONS block stripping |
-| repolix/cli.py | Complete | Click CLI — index and query commands, confidence label |
-| repolix/api.py | Complete | FastAPI backend — /index, /query, /status, /health; serves built SPA from frontend/dist |
+| repolix/tour.py | Complete | Call-graph analysis, entry point detection, chunk selection, context formatting, generate_tour orchestrator |
+| repolix/cli.py | Complete | Click CLI — index, query, and tour commands, confidence label |
+| repolix/api.py | Complete | FastAPI backend — /index, /query, /tour, /status, /health; serves built SPA from frontend/dist |
 | frontend/src/ | Complete | React + TypeScript SPA; Vite dev server for development; built output served by FastAPI |
 | tests/conftest.py | Complete | Creates minimal frontend/dist stub before TestClient initialises |
 
@@ -232,9 +233,10 @@ the embedding logic lives in store.py as _embed_texts and build_embed_text.
 | tests/test_llm.py | 36 | Passing |
 | tests/test_cli.py | 12 | Passing |
 | tests/test_api.py | 9 | Passing |
+| tests/test_tour.py | 24 | Passing |
 
 Run all tests: pytest tests/ -v
-Total: 165 passing
+Total: 193 passing
 
 Note: test counts above are approximate. Always trust the actual
 pytest output over this table.
@@ -263,11 +265,12 @@ pytest output over this table.
 | 16 | repolix 0.2.0 — PyPI minor release shipping JS/TS indexing | Complete |
 | 17 | repolix 0.2.1 — Web UI same-origin fetches, CORS localhost/127.0.0.1, VITE_API_URL | Complete |
 | 18 | LLM output layer: structured response format, section parsing, confidence gating | Complete |
+| 19 | repolix 0.2.2 — tour command: proactive orientation briefing via call-graph analysis | Complete |
 
 V1 shipped as repolix 0.1.0 on PyPI; **0.1.1** followed (UI polish and fixes).
-**0.2.1** is the current line: **0.2.0** plus `.ts`, `.tsx`, `.js`, `.jsx` indexing
-and web UI fixes for bundled SPA (any `--port`) and dev (`VITE_API_URL`).
-Milestone 18 (LLM output quality) complete.
+**0.2.2** is the current line: **0.2.1** plus `repolix tour` — a proactive codebase
+orientation briefing driven by call-graph metadata, zero embedding cost.
+Milestone 19 (tour command) complete.
 
 ---
 
@@ -385,12 +388,35 @@ Test on TestPyPI first: twine upload --repository testpypi dist/*
 
 ---
 
+## Milestone 19 — tour command: proactive orientation briefing
+
+| Change | Files |
+|---|---|
+| Add repolix/tour.py: get_all_chunks, compute_inbound_counts, identify_entry_points, select_tour_chunks, build_tour_context, generate_tour | repolix/tour.py |
+| Add TOUR_SYSTEM_PROMPT and answer_tour() to llm.py; move import re to module level | repolix/llm.py |
+| Add tour CLI command: --path scope, --save flag, Rich panel with 5 sections + Most Referenced footer | repolix/cli.py |
+| Add TourRequest, TourResponse Pydantic models and POST /tour endpoint | repolix/api.py |
+| Add tests/test_tour.py: 24 tests covering all pipeline functions | tests/test_tour.py |
+
+Key design decisions:
+- Phase 1 (local): reads ChromaDB metadata only — no embeddings, no API calls
+- Phase 2: single LLM chat completion call with tour-specific prompt
+- inbound_counts is a reverse-adjacency count — O(n × avg_calls), no full graph needed
+- Two-signal entry point detection: heuristic (file/function name) ranks above graph-source (zero inbound, nonzero outbound)
+- Two-pass chunk selection: Pass 1 enforces one-chunk-per-file diversity; Pass 2 fills remaining slots
+- build_tour_context accepts _all_chunks for top-function file-path lookup — prevents "unknown" for highly-referenced functions not in the selected 8
+- frozenset for ENTRY_POINT_FILES and ENTRY_POINT_FUNCTIONS: O(1) membership test, immutable at module scope
+- Lazy import of answer_tour inside generate_tour: defensive against future circular imports between tour.py and llm.py
+
+---
+
 ## V2 Roadmap
 
 - TypeScript / JavaScript support (Tree-sitter parser swap) ✓ Done in V2-1
+- `repolix tour` — proactive orientation briefing ✓ Done in V2-2
 - VS Code extension wrapper
 - Dependency graph visualization
-- "Start here" guide auto-generated for new engineers
+- `repolix trace` — call graph traversal for any named function
 - Secret pattern filter in walker.py (skip files with hardcoded credentials)
 - Smart truncation: preserve head + tail of oversized chunks
 - Index-time warning for truncated chunks

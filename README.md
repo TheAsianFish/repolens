@@ -79,6 +79,43 @@ repolix query "where is UserService defined" --no-llm
 repolix index ./path/to/repo --force
 ```
 
+### Get an orientation briefing
+
+```bash
+repolix tour .
+```
+
+```
+╭──────────────────────────── Tour ─────────────────────────────╮
+│ OVERVIEW                                                       │
+│ repolix is a local-first codebase context engine...           │
+│                                                                │
+│ ENTRY POINTS                                                   │
+│ repolix/cli.py — main() is the Click entrypoint               │
+│ repolix/api.py — FastAPI app started by uvicorn               │
+│                                                                │
+│ MAJOR MODULES                                                  │
+│ store.py: embedding pipeline and ChromaDB management          │
+│ retriever.py: hybrid search, RRF, and re-ranking              │
+│ ...                                                            │
+╰────────────────────────────────────────────────────────────────╯
+──────────────── Most Referenced ────────────────
+  _get_client     called by 6 functions
+  chunk_file      called by 4 functions
+
+Analyzed 183 chunks
+```
+
+`repolix tour` scans the call-graph metadata already in ChromaDB — **no extra API calls for embeddings**. A single LLM call produces the briefing.
+
+```bash
+# Scope to a subdirectory
+repolix tour . --path repolix/
+
+# Save briefing to .repolix/tour.md
+repolix tour . --save
+```
+
 ### Web UI
 
 ```bash
@@ -185,8 +222,11 @@ bash start.sh
 
 ## Roadmap
 
+**Shipped in V2**
+- `.ts`, `.tsx`, `.js`, `.jsx` indexing via Tree-sitter JavaScript/TypeScript grammars
+- `repolix tour` — proactive orientation briefing driven by call-graph metadata (0.2.2)
+
 **Next in V2**
-- `repolix tour` — proactive orientation briefing for unfamiliar repos
 - `repolix trace` — call graph traversal for any named function
 - Local model support via Ollama (zero API cost, fully air-gapped)
 - Persistent query sessions across terminal restarts
