@@ -270,9 +270,9 @@ bash start.sh
 - `.ts`, `.tsx`, `.js`, `.jsx` indexing via Tree-sitter JavaScript/TypeScript grammars
 - `repolix tour` — proactive orientation briefing driven by call-graph metadata (0.2.2)
 - `repolix trace` — BFS call-graph traversal with forward/reverse/explain modes (0.2.3)
+- Exact-name lookup for `trace` so common symbols are not missed (0.2.4)
 
 **Next**
-- 0.2.4 — exact-name lookup for `trace` (in progress)
 - 0.3.0 — Ollama for answer generation (OpenAI remains optional)
 - 0.3.1 — local embeddings so indexing and search need no external API
 - 0.3.2 — `repolix status` (index stats, provider, model)

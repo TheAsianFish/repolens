@@ -16,7 +16,7 @@ Free and open source. Built for developer tooling.
 Published on PyPI as `repolix` (previously developed under the name
 `codesight`; renamed before public launch).
 
-**Current line:** Milestone 22 (0.2.4, uncommitted) then 0.3.x Ollama.
+**Current line:** 0.2.4 shipped. Next is 0.3.0 Ollama generation.
 See "Current development line (0.2.4 → 0.3.x)" below. Generation and
 embeddings still use OpenAI until those milestones land.
 
@@ -274,16 +274,15 @@ pytest output over this table.
 | 19 | repolix 0.2.2 — tour command: proactive orientation briefing via call-graph analysis | Complete |
 | 20 | repolix trace command: BFS call-graph traversal, forward/reverse/explain modes | Complete |
 | 21 | repolix 0.2.3 — trace output quality: BUILTIN_NAMES filter + citation test coverage | Complete |
-| 22 | repolix 0.2.4 — exact-name lookup for trace (`lookup_by_exact_name`) | In progress |
+| 22 | repolix 0.2.4 — exact-name lookup for trace (`lookup_by_exact_name`) | Complete |
 | 23 | repolix 0.3.0 — Ollama generation provider | Planned |
 | 24 | repolix 0.3.1 — local embeddings via Ollama | Planned |
 | 25 | repolix 0.3.2 — `repolix status` + richer GET /status | Planned |
 
 V1 shipped as repolix 0.1.0 on PyPI; **0.1.1** followed (UI polish and fixes).
 **0.2.2** shipped `repolix tour`. **0.2.3** shipped `repolix trace`.
-**Current line:** 0.2.4 (uncommitted bugfix) then 0.3.x Ollama. See
-"Current development line" below. Do not start 0.3.0 until 0.2.4 is
-committed and published.
+**0.2.4** shipped exact-name lookup for `trace`. Next is **0.3.0**
+Ollama generation.
 
 ---
 
@@ -497,21 +496,23 @@ with a provider/model setting. OpenAI remains an option. Switching
 embedding models changes vector space — full re-index required. Do not
 mix local embeddings into the 0.3.0 generation PR.
 
-### Milestone 22 — 0.2.4 (in progress, uncommitted)
+### Milestone 22 — 0.2.4 (complete)
 
 Exact-name lookup so `repolix trace retrieve` cannot miss a real symbol
 because `keyword_search(..., n_results=5)` ranked other documents first.
+Shipped on PyPI as 0.2.4. `__version__` aligned with pyproject (was
+stuck at 0.2.2).
 
 | Change | Files | Status |
 |---|---|---|
-| Add `lookup_by_exact_name` (ChromaDB `where={"name": name}`) | `repolix/store.py` | Written, uncommitted |
-| `lookup_chunk_by_name` delegates to it | `repolix/trace.py` | Written, uncommitted |
-| Tests for exact lookup + keyword-cap regression | `tests/test_store.py`, `tests/test_trace.py` | Written, uncommitted |
-| Publish 0.2.4 to PyPI | — | Not started |
+| Add `lookup_by_exact_name` (ChromaDB `where={"name": name}`) | `repolix/store.py` | Complete |
+| `lookup_chunk_by_name` delegates to it | `repolix/trace.py` | Complete |
+| Tests for exact lookup + keyword-cap regression | `tests/test_store.py`, `tests/test_trace.py` | Complete |
+| Bump package version; sync `__version__` | `pyproject.toml`, `repolix/__init__.py` | Complete |
+| Publish 0.2.4 to PyPI | — | Complete |
 
-Also in this release: align README/CONTEXT roadmaps (this section).
 `expand_via_call_graph` still uses `keyword_search(n_results=3)` — same
-class of bug; fix in a later polish pass, not this PR.
+class of bug; fix in a later polish pass, not this release.
 
 Known leftover (not 0.2.4): `trace` tree `[file:line]` citations are
 stripped inside Rich `Panel` because brackets are parsed as markup.
@@ -566,7 +567,7 @@ smart truncation. Move these to backlog; they are not resume blockers.
 - TypeScript / JavaScript support (Tree-sitter parser swap) ✓ Done in V2-1
 - `repolix tour` — proactive orientation briefing ✓ Done in V2-2
 - `repolix trace` — call graph traversal for any named function ✓ Done in V2-3
-- Exact-name lookup for `trace` (0.2.4) — in progress
+- Exact-name lookup for `trace` (0.2.4) ✓
 - Ollama generation (0.3.0) — planned
 - Local embeddings via Ollama (0.3.1) — planned
 - `repolix status` + richer GET /status (0.3.2) — planned
@@ -695,7 +696,6 @@ Sequence:
   cap. Common identifiers (retrieve, query, index) appear in many chunks
   and the real function can fall outside the cap. Use lookup_by_exact_name
   (ChromaDB where={"name": name}) instead.
-- Do not start 0.3.0 Ollama work until 0.2.4 is committed and published.
 - Do not mix local embeddings into the 0.3.0 generation change —
   embeddings are 0.3.1. One feature per version.
 - Do not rewrite cli/api/store/llm around a new LLM SDK for Ollama —
