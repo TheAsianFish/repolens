@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/repolix.svg)](https://pypi.org/project/repolix/)
 
-**Ask plain English questions about any Python, JavaScript, or TypeScript codebase. Get answers with exact file and line citations. Search runs locally; generation can use OpenAI or Ollama.**
+**Ask plain English questions about a Python, JavaScript, or TypeScript repo. Get answers with exact file and line citations.**
 
 ## Preview
 
@@ -35,7 +35,7 @@ Generating answer...
 confidence: high
 ```
 
-AST parsing, keyword search, and the vector index stay on your machine. Indexing still sends chunk text to OpenAI embeddings. Answer generation can use OpenAI or a local Ollama model. Local embeddings are 0.3.1.
+Search runs on your machine. Indexing uses OpenAI embeddings. Answers can use OpenAI or a local Ollama model.
 
 ---
 
@@ -44,8 +44,8 @@ AST parsing, keyword search, and the vector index stay on your machine. Indexing
 ### Requirements
 
 - Python 3.11+
-- OpenAI API key for indexing and query search ([get one here](https://platform.openai.com/api-keys))
-- Optional: [Ollama](https://ollama.com) for local answer generation (`query`, `tour`, `trace --explain`)
+- OpenAI API key for indexing and search ([get one here](https://platform.openai.com/api-keys))
+- Optional: [Ollama](https://ollama.com) for local answers
 
 > Node.js is **not required** for end users. The web UI is pre-built and bundled inside the package.
 
@@ -73,19 +73,16 @@ repolix index ./path/to/repo
 ```bash
 repolix query "how does authentication work"
 
-# Raw chunks without LLM (useful for debugging retrieval)
+# Raw chunks without an LLM
 repolix query "where is UserService defined" --no-llm
-
-# Local generation via Ollama (search embeddings still use OpenAI)
-repolix query "how does authentication work" --provider ollama
 
 # Force re-index all files, not just changed ones
 repolix index ./path/to/repo --force
 ```
 
-### Local generation with Ollama
+### Local answers with Ollama
 
-Install [Ollama](https://ollama.com), pull a chat model, then point generation at it. OpenAI remains the default.
+OpenAI is the default. For local generation, [install Ollama](https://ollama.com) and pull a model:
 
 ```bash
 ollama pull llama3.2
@@ -95,9 +92,7 @@ repolix tour . --provider ollama
 repolix trace retrieve --explain --provider ollama
 ```
 
-`--provider` and `--model` also read `REPOLIX_LLM_PROVIDER` and `REPOLIX_LLM_MODEL`. Ollama's OpenAI-compatible server defaults to `http://localhost:11434/v1` (`REPOLIX_OLLAMA_BASE_URL` to override).
-
-`OPENAI_API_KEY` is still required for `index` and for `query` search (the question is embedded). `tour` and `trace --explain` with `--provider ollama` do not need it. Switching embedding models is 0.3.1 and requires a full re-index.
+`index` and `query` search still need an OpenAI key. `tour` and `trace --explain` with `--provider ollama` do not. Use `--model` to pick a different Ollama model.
 
 ### Get an orientation briefing
 
@@ -190,11 +185,9 @@ Getting dropped into an unfamiliar codebase is painful. Documentation is outdate
 
 ## Who is this for
 
-repolix is built for developers navigating codebases they didn't write —
-onboarding to a new job, contributing to open source, or auditing vendor
-code. It works on repos you don't own and don't have open in an editor.
-Unlike IDE-integrated tools, it requires no active editing session and
-nothing leaves your machine.
+repolix is for developers navigating code they didn't write — a new job,
+an open-source repo, vendor code. It does not need an editor session.
+Indexing uses OpenAI embeddings; answers can stay local with Ollama.
 
 ---
 
@@ -229,16 +222,7 @@ Each query produces:
 
 ## Cost
 
-| Action | Approximate cost |
-|---|---|
-| Index a 30k-line repo | ~$0.02 (one-time, OpenAI embeddings) |
-| Re-index after a small change | embedding calls only for changed files |
-| Query / tour / trace --explain with OpenAI | ~$0.001 |
-| Query / tour / trace --explain with `--provider ollama` | $0 for generation |
-
-On this repo (22 indexable files, tests excluded): an unchanged re-index skipped **22/22** files (no embedding API calls). One changed file would skip 21/22 ≈ **95%** of embedding calls.
-
-Incremental indexing means only changed files are re-embedded on subsequent runs. Orphaned chunks from deleted or renamed files are removed.
+Indexing uses OpenAI embeddings (~$0.02 for a 30k-line repo). Re-index skips unchanged files. `--provider ollama` makes generation free; search still embeds via OpenAI.
 
 ---
 
@@ -249,7 +233,7 @@ Incremental indexing means only changed files are re-embedded on subsequent runs
 | AST parsing | Tree-sitter |
 | Embeddings | text-embedding-3-small |
 | Vector store | ChromaDB (local, no server needed) |
-| LLM | gpt-5.4-mini (OpenAI) or Ollama via the OpenAI-compatible `/v1` API |
+| LLM | gpt-5.4-mini, or Ollama (`--provider ollama`) |
 | Backend | FastAPI |
 | Frontend | React + TypeScript |
 | CLI | Click + Rich |
@@ -283,8 +267,7 @@ bash start.sh
 - Deeply nested functions are included in their parent chunk
 - Large functions (>300 tokens) are truncated at the chunk cap
 - Complex cross-file reasoning may require rephrasing the query
-- Indexing and `query` search still use OpenAI embeddings; local embeddings are 0.3.1
-- Answer generation can use OpenAI or Ollama (`--provider ollama`)
+- Indexing and `query` search still use OpenAI embeddings; local embeddings are next
 
 ---
 
@@ -295,10 +278,10 @@ bash start.sh
 - `repolix tour` — proactive orientation briefing driven by call-graph metadata (0.2.2)
 - `repolix trace` — BFS call-graph traversal with forward/reverse/explain modes (0.2.3)
 - Exact-name lookup for `trace` so common symbols are not missed (0.2.4)
-- Ollama for answer generation; OpenAI remains optional (0.3.0)
+- Ollama for answer generation (0.3.0)
 
 **Next**
-- 0.3.1 — local embeddings so indexing and search need no external API
+- 0.3.1 — local embeddings so indexing and search need no OpenAI key
 - 0.3.2 — `repolix status` (index stats, provider, model)
 
 **Backlog**

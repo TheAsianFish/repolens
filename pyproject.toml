@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "repolix"
 version = "0.3.0"
-description = "Local-first codebase context engine — ask plain English questions about any Python codebase"
+description = "Local-first codebase context engine — ask plain English questions about Python, JavaScript, and TypeScript repos"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
