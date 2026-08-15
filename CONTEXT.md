@@ -12,9 +12,9 @@ Update this file at the end of every milestone before moving on.
 Do not restyle the UI, do not add tour/trace to the SPA, do not
 mix extra CLI commands into that PR. One feature per version.
 
-Latest on PyPI: **0.2.4** (https://pypi.org/project/repolix/0.2.4/).
-Package version is **0.3.0** (Ollama generation) — publish when
-asked. Working tree should be clean except local `.env` / `.repolix/`.
+Latest on PyPI: **0.3.0** (https://pypi.org/project/repolix/0.3.0/).
+Ollama generation is shipped. Next is 0.3.1 local embeddings.
+Working tree should be clean except local `.env` / `.repolix/`.
 
 Keep `__version__` in `repolix/__init__.py` identical to
 `pyproject.toml` `[project].version`. 0.2.4 fixed a drift (it was
@@ -588,11 +588,11 @@ without making embeddings local. OpenAI remains the default provider.
 | Provider tests + CLI/API/LLM coverage | `tests/test_providers.py` and others | Complete |
 | Bump 0.3.0; sync `__version__` | `pyproject.toml`, `repolix/__init__.py` | Complete |
 | README Ollama section + measured skip counts | `README.md` | Complete |
+| Publish 0.3.0 to PyPI | — | Complete |
 
 Flags also read `REPOLIX_LLM_PROVIDER`, `REPOLIX_LLM_MODEL`,
 `REPOLIX_OLLAMA_BASE_URL`. Default Ollama model is `llama3.2`.
-Do not publish until asked; PyPI 0.2.4 is still the live public
-release until 0.3.0 is uploaded.
+Live on PyPI: https://pypi.org/project/repolix/0.3.0/
 
 ### Milestone 24 — 0.3.1 local embeddings
 
