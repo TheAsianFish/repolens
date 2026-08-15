@@ -6,10 +6,12 @@ in-process without spawning a subprocess. OpenAI and store
 functions are mocked throughout.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
-from repolix.cli import main, _confidence_label
+
+from repolix.cli import _confidence_label, main
 
 
 def mock_index_repo_result(
@@ -229,3 +231,89 @@ class TestQueryCommand:
             assert "foo" in result.output
             assert "confidence: low" in result.output
             assert "Citations" not in result.output
+
+
+class TestOllamaGenerationCli:
+
+    def _index_stub(self, tmp_path):
+        store = tmp_path / ".repolix"
+        store.mkdir()
+        (store / "chroma.sqlite3").touch()
+        return store
+
+    def test_query_ollama_passes_provider_to_answer_query(self, tmp_path):
+        self._index_stub(tmp_path)
+        mock_results = [{
+            "source": "def foo(): pass",
+            "file_path": str(tmp_path / "foo.py"),
+            "file_rel_path": "foo.py",
+            "name": "foo",
+            "node_type": "function_definition",
+            "start_line": 1,
+            "end_line": 1,
+            "calls": [],
+            "docstring": None,
+            "parent_class": None,
+            "distance": 0.1,
+            "rrf_score": 0.02,
+            "rerank_score": 0.32,
+        }]
+        mock_answer = {
+            "answer": "foo does something [1].",
+            "answer_sections": {
+                "answer": "foo does something [1].",
+                "how_it_works": None,
+                "where_to_look": None,
+            },
+            "citations": [],
+            "chunks_used": 1,
+            "confidence": "high",
+            "navigation": None,
+        }
+        with patch("repolix.cli.get_openai_client") as mock_embed, \
+             patch("repolix.cli.get_llm_client") as mock_llm, \
+             patch("repolix.cli.retrieve", return_value=mock_results), \
+             patch("repolix.cli.answer_query", return_value=mock_answer) as mock_ans:
+            mock_embed.return_value = MagicMock()
+            mock_llm.return_value = MagicMock()
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                ["query", "what does foo do", "--repo", str(tmp_path),
+                 "--provider", "ollama", "--model", "llama3.2"],
+            )
+            assert result.exit_code == 0, result.output
+            mock_embed.assert_called()
+            mock_llm.assert_called_once()
+            kwargs = mock_ans.call_args.kwargs
+            assert kwargs["provider"] == "ollama"
+            assert kwargs["model"] == "llama3.2"
+
+    def test_tour_ollama_does_not_need_openai_client(self, tmp_path):
+        fake_tour = {
+            "briefing": "overview text",
+            "briefing_sections": {
+                "overview": "overview text",
+                "entry_points": None,
+                "major_modules": None,
+                "key_abstractions": None,
+                "start_here": None,
+            },
+            "entry_points": [],
+            "top_functions": [],
+            "chunk_count": 3,
+            "error": None,
+        }
+        with patch("repolix.cli.get_openai_client") as mock_embed, \
+             patch("repolix.cli.get_llm_client") as mock_llm, \
+             patch("repolix.tour.generate_tour", return_value=fake_tour):
+            mock_llm.return_value = MagicMock()
+            runner = CliRunner()
+            result = runner.invoke(
+                main,
+                ["tour", str(tmp_path), "--provider", "ollama"],
+            )
+            assert result.exit_code == 0, result.output
+            mock_embed.assert_not_called()
+            mock_llm.assert_called_once()
+            assert "Tour" in result.output

@@ -18,17 +18,30 @@ from pathlib import Path
 
 import click
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, OpenAI
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TextColumn,
+    TimeRemainingColumn,
+)
 from rich.rule import Rule
 
 from repolix import __version__
-from repolix.store import index_repo
-from repolix.retriever import retrieve, format_results, display_rel_path_from_meta
 from repolix.llm import answer_query
+from repolix.providers import (
+    ProviderError,
+    get_llm_client,
+    ollama_base_url,
+    resolve_model,
+    resolve_provider,
+)
+from repolix.retriever import display_rel_path_from_meta, format_results, retrieve
+from repolix.store import index_repo
 
 # Load .env file if present. This must happen before any os.getenv
 # calls. load_dotenv is a no-op if .env does not exist, so it is
@@ -50,6 +63,52 @@ def get_openai_client() -> OpenAI:
             "Add it to your .env file or export it in your shell."
         )
     return OpenAI(api_key=api_key)
+
+
+def _llm_provider_option(f):
+    return click.option(
+        "--provider",
+        type=click.Choice(["openai", "ollama"], case_sensitive=False),
+        default=None,
+        envvar="REPOLIX_LLM_PROVIDER",
+        help="LLM provider for generation (openai or ollama). "
+             "Indexing and query embeddings still use OpenAI.",
+    )(f)
+
+
+def _llm_model_option(f):
+    return click.option(
+        "--model",
+        default=None,
+        envvar="REPOLIX_LLM_MODEL",
+        help="Generation model. Default: gpt-5.4-mini (openai) "
+             "or llama3.2 (ollama).",
+    )(f)
+
+
+def _resolve_cli_llm(provider: str | None, model: str | None) -> tuple[str, str]:
+    try:
+        resolved = resolve_provider(provider)
+        return resolved, resolve_model(resolved, model)
+    except ProviderError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _generation_client(provider: str) -> OpenAI:
+    try:
+        if provider == "openai":
+            return get_openai_client()
+        return get_llm_client(provider)
+    except ProviderError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+def _ollama_failure_message(exc: BaseException) -> str:
+    return (
+        f"Ollama generation failed ({exc}). "
+        f"Is Ollama running at {ollama_base_url()}? "
+        "Pull a model with: ollama pull llama3.2"
+    )
 
 
 def _confidence_label(top_score: float) -> str:
@@ -215,7 +274,17 @@ def index(repo_path: str, store: str | None, force: bool, include_tests: bool):
     show_default=True,
     help="Number of chunks to retrieve.",
 )
-def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
+@_llm_provider_option
+@_llm_model_option
+def query(
+    question: str,
+    repo: str,
+    store: str | None,
+    no_llm: bool,
+    n: int,
+    provider: str | None,
+    model: str | None,
+):
     """
     Query an indexed repository with a plain English question.
 
@@ -225,12 +294,14 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
       repolix query "how does authentication work"
       repolix query "where is the database connection set up"
       repolix query "what does UserService do" --no-llm
+      repolix query "how does authentication work" --provider ollama
     """
     console = Console(highlight=False)
 
     repo_path = Path(repo).resolve()
-    client = get_openai_client()
+    embed_client = get_openai_client()
     store_path = resolve_store_path(repo_path, store)
+    provider, model = _resolve_cli_llm(provider, model)
 
     if not (store_path / "chroma.sqlite3").exists():
         raise click.ClickException(
@@ -242,19 +313,29 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
     results = retrieve(
         query=question,
         store_path=store_path,
-        openai_client=client,
+        openai_client=embed_client,
     )
 
     if no_llm or not results:
         click.echo(format_results(results))
         return
 
-    console.print("[dim]Generating answer...[/dim]")
-    output = answer_query(
-        query=question,
-        results=results,
-        openai_client=client,
+    console.print(f"[dim]Generating answer ({provider}/{model})...[/dim]")
+    llm_client = (
+        embed_client if provider == "openai" else _generation_client(provider)
     )
+    try:
+        output = answer_query(
+            query=question,
+            results=results,
+            openai_client=llm_client,
+            model=model,
+            provider=provider,
+        )
+    except (APIConnectionError, APIStatusError) as exc:
+        if provider == "ollama":
+            raise click.ClickException(_ollama_failure_message(exc)) from exc
+        raise
 
     sections = output.get("answer_sections")
     navigation = output.get("navigation")
@@ -370,7 +451,16 @@ def query(question: str, repo: str, store: str | None, no_llm: bool, n: int):
     default=False,
     help="Save the briefing to .repolix/tour.md",
 )
-def tour(repo_path: str, store: str | None, scope_path: str | None, save: bool):
+@_llm_provider_option
+@_llm_model_option
+def tour(
+    repo_path: str,
+    store: str | None,
+    scope_path: str | None,
+    save: bool,
+    provider: str | None,
+    model: str | None,
+):
     """
     Generate a proactive orientation briefing for a repository.
 
@@ -383,24 +473,36 @@ def tour(repo_path: str, store: str | None, scope_path: str | None, save: bool):
       repolix tour .
       repolix tour . --path src/payments
       repolix tour . --save
+      repolix tour . --provider ollama
     """
-    from repolix.tour import generate_tour
     from rich.text import Text
+
+    from repolix.tour import generate_tour
 
     console = Console(highlight=False)
     repo = Path(repo_path).resolve()
-    client = get_openai_client()
+    provider, model = _resolve_cli_llm(provider, model)
+    client = _generation_client(provider)
     store_path = resolve_store_path(repo, store)
 
     scope_display = f" ({scope_path})" if scope_path else ""
-    console.print(f"[dim]Generating tour{scope_display}...[/dim]")
-
-    result = generate_tour(
-        store_path=store_path,
-        repo_path=repo,
-        openai_client=client,
-        path_prefix=scope_path,
+    console.print(
+        f"[dim]Generating tour{scope_display} ({provider}/{model})...[/dim]"
     )
+
+    try:
+        result = generate_tour(
+            store_path=store_path,
+            repo_path=repo,
+            openai_client=client,
+            path_prefix=scope_path,
+            model=model,
+            provider=provider,
+        )
+    except (APIConnectionError, APIStatusError) as exc:
+        if provider == "ollama":
+            raise click.ClickException(_ollama_failure_message(exc)) from exc
+        raise
 
     if result["error"]:
         raise click.ClickException(result["error"])
@@ -483,6 +585,8 @@ def tour(repo_path: str, store: str | None, scope_path: str | None, save: bool):
     default=False,
     help="Add LLM explanation of the call chain (uses 1 API call).",
 )
+@_llm_provider_option
+@_llm_model_option
 def trace(
     symbol: str,
     repo: str,
@@ -491,6 +595,8 @@ def trace(
     max_nodes: int,
     reverse: bool,
     explain: bool,
+    provider: str | None,
+    model: str | None,
 ):
     """
     Trace the call graph for a named function or class.
@@ -502,9 +608,9 @@ def trace(
       repolix trace retrieve --depth 5
       repolix trace retrieve --reverse
       repolix trace index_repo --explain
+      repolix trace retrieve --explain --provider ollama
     """
     from repolix.trace import run_trace
-    from rich.text import Text
 
     console = Console(highlight=False)
     repo_path = Path(repo).resolve()
@@ -516,18 +622,26 @@ def trace(
             f"Run: repolix index {repo_path}"
         )
 
-    client = get_openai_client() if explain else None
+    provider, model = _resolve_cli_llm(provider, model)
+    client = _generation_client(provider) if explain else None
     console.print(f"[dim]Tracing {symbol}...[/dim]")
 
-    result = run_trace(
-        symbol=symbol,
-        store_path=store_path,
-        max_depth=depth,
-        max_nodes=max_nodes,
-        include_backward=not reverse,
-        openai_client=client,
-        explain=explain,
-    )
+    try:
+        result = run_trace(
+            symbol=symbol,
+            store_path=store_path,
+            max_depth=depth,
+            max_nodes=max_nodes,
+            include_backward=not reverse,
+            openai_client=client,
+            explain=explain,
+            model=model,
+            provider=provider,
+        )
+    except (APIConnectionError, APIStatusError) as exc:
+        if provider == "ollama":
+            raise click.ClickException(_ollama_failure_message(exc)) from exc
+        raise
 
     if result["error"] and result["forward"].get("not_found"):
         raise click.ClickException(result["error"])

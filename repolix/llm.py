@@ -1,8 +1,9 @@
 """
 llm.py
 
-Constructs prompts from retrieved chunks, calls gpt-5.4-mini,
-and parses the response into a structured answer with citations.
+Constructs prompts from retrieved chunks, calls the generation
+model (OpenAI gpt-5.4-mini by default, or Ollama), and parses
+the response into a structured answer with citations.
 
 The citation format uses numbered labels [1], [2] etc. that the
 LLM is instructed to use inline. We map those labels back to
@@ -13,9 +14,13 @@ import re
 
 from openai import OpenAI
 
+from repolix.providers import (
+    DEFAULT_OPENAI_MODEL,
+    completion_token_kwargs,
+)
 from repolix.retriever import display_rel_path_from_meta
 
-LLM_MODEL = "gpt-5.4-mini"
+LLM_MODEL = DEFAULT_OPENAI_MODEL
 
 # Maximum chunks to send to the LLM. Set to 8 to include up to
 # 5 primary results + 3 call graph expansions from expand_via_call_graph.
@@ -239,6 +244,24 @@ def _parse_sections(answer_text: str) -> dict:
     return sections
 
 
+def _create_chat_completion(
+    openai_client: OpenAI,
+    *,
+    messages: list[dict],
+    temperature: float,
+    max_output_tokens: int,
+    model: str,
+    provider: str,
+):
+    """Call chat.completions.create with the provider-correct token limit."""
+    return openai_client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=temperature,
+        **completion_token_kwargs(provider, max_output_tokens),
+    )
+
+
 TOUR_SYSTEM_PROMPT = """You are a senior engineer giving a new
 developer their first orientation to an unfamiliar codebase.
 You have been given a structural analysis: the most-called
@@ -309,14 +332,21 @@ Rules:
 """
 
 
-def answer_tour(context: str, openai_client: OpenAI) -> dict:
+def answer_tour(
+    context: str,
+    openai_client: OpenAI,
+    model: str = LLM_MODEL,
+    provider: str = "openai",
+) -> dict:
     """
     Call the LLM with the tour context and parse the response
     into named sections.
 
     Args:
         context: Formatted string from build_tour_context().
-        openai_client: Initialized OpenAI client.
+        openai_client: Initialized OpenAI client (or Ollama via base_url).
+        model: Generation model name.
+        provider: openai or ollama — selects the token-limit parameter.
 
     Returns:
         Dict with keys:
@@ -326,14 +356,16 @@ def answer_tour(context: str, openai_client: OpenAI) -> dict:
                 key_abstractions, start_here
                 Each is str | None.
     """
-    response = openai_client.chat.completions.create(
-        model=LLM_MODEL,
+    response = _create_chat_completion(
+        openai_client,
         messages=[
             {"role": "system", "content": TOUR_SYSTEM_PROMPT},
             {"role": "user", "content": context},
         ],
         temperature=0.2,
-        max_completion_tokens=1024,
+        max_output_tokens=1024,
+        model=model,
+        provider=provider,
     )
 
     briefing = response.choices[0].message.content or ""
@@ -407,6 +439,8 @@ def answer_trace(
     backward: list[dict],
     symbol: str,
     openai_client: OpenAI,
+    model: str = LLM_MODEL,
+    provider: str = "openai",
 ) -> str:
     """
     Generate a plain English explanation of a trace result.
@@ -415,7 +449,9 @@ def answer_trace(
         tree_str: Formatted tree string from format_trace_tree().
         backward: List of caller dicts from backward_trace().
         symbol: The root symbol name.
-        openai_client: Initialized OpenAI client.
+        openai_client: Initialized OpenAI client (or Ollama via base_url).
+        model: Generation model name.
+        provider: openai or ollama — selects the token-limit parameter.
 
     Returns:
         Plain English explanation string. No citations block.
@@ -431,14 +467,16 @@ def answer_trace(
         f"CALLERS OF {symbol}:\n{caller_lines}"
     )
 
-    response = openai_client.chat.completions.create(
-        model=LLM_MODEL,
+    response = _create_chat_completion(
+        openai_client,
         messages=[
             {"role": "system", "content": TRACE_SYSTEM_PROMPT},
             {"role": "user", "content": context},
         ],
         temperature=0.2,
-        max_completion_tokens=512,
+        max_output_tokens=512,
+        model=model,
+        provider=provider,
     )
 
     return response.choices[0].message.content or ""
@@ -448,15 +486,19 @@ def answer_query(
     query: str,
     results: list[dict],
     openai_client: OpenAI,
+    model: str = LLM_MODEL,
+    provider: str = "openai",
 ) -> dict:
     """
-    Run the full LLM pipeline: build prompt, call gpt-5.4-mini,
-    parse citations, return structured response.
+    Run the full LLM pipeline: build prompt, call the generation
+    model, parse citations, return structured response.
 
     Args:
         query: The user's plain English question.
         results: Retrieved and ranked chunks from retriever.retrieve().
-        openai_client: Initialized OpenAI client.
+        openai_client: Initialized OpenAI client (or Ollama via base_url).
+        model: Generation model name.
+        provider: openai or ollama — selects the token-limit parameter.
 
     Returns:
         Dict with keys:
@@ -492,14 +534,16 @@ def answer_query(
 
     prompt, labeled_chunks = build_prompt(query, results)
 
-    response = openai_client.chat.completions.create(
-        model=LLM_MODEL,
+    response = _create_chat_completion(
+        openai_client,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         temperature=0.1,
-        max_completion_tokens=1024,
+        max_output_tokens=1024,
+        model=model,
+        provider=provider,
     )
 
     response_text = response.choices[0].message.content or ""

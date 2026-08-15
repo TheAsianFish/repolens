@@ -269,6 +269,8 @@ def run_trace(
     include_backward: bool = True,
     openai_client: OpenAI | None = None,
     explain: bool = False,
+    model: str | None = None,
+    provider: str = "openai",
 ) -> dict:
     """
     Orchestrate the full trace pipeline.
@@ -298,8 +300,15 @@ def run_trace(
 
     explanation = None
     if explain and openai_client is not None:
-        from repolix.llm import answer_trace
-        explanation = answer_trace(tree_str, backward, symbol, openai_client)
+        from repolix.llm import LLM_MODEL, answer_trace
+        explanation = answer_trace(
+            tree_str,
+            backward,
+            symbol,
+            openai_client,
+            model=model or LLM_MODEL,
+            provider=provider,
+        )
 
     return {
         "symbol": symbol,

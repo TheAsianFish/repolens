@@ -17,14 +17,21 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, OpenAI
 from pydantic import BaseModel
 from starlette.staticfiles import StaticFiles
 
 from repolix import __version__
-from repolix.store import index_repo
-from repolix.retriever import retrieve, display_rel_path_from_meta
 from repolix.llm import answer_query
+from repolix.providers import (
+    ProviderError,
+    get_llm_client,
+    ollama_base_url,
+    resolve_model,
+    resolve_provider,
+)
+from repolix.retriever import display_rel_path_from_meta, retrieve
+from repolix.store import index_repo
 
 load_dotenv()
 
@@ -86,6 +93,36 @@ def get_openai_client() -> OpenAI:
     return OpenAI(api_key=api_key)
 
 
+def resolve_generation(provider: str | None, model: str | None) -> tuple[str, str]:
+    """Resolve provider/model or raise HTTP 400."""
+    try:
+        resolved = resolve_provider(provider)
+        return resolved, resolve_model(resolved, model)
+    except ProviderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def get_generation_client(provider: str, embed_client: OpenAI | None = None) -> OpenAI:
+    """OpenAI client for chat, or Ollama via the same SDK."""
+    if provider == "openai":
+        return embed_client if embed_client is not None else get_openai_client()
+    try:
+        return get_llm_client(provider)
+    except ProviderError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def ollama_http_error(exc: BaseException) -> HTTPException:
+    return HTTPException(
+        status_code=502,
+        detail=(
+            f"Ollama generation failed ({exc}). "
+            f"Is Ollama running at {ollama_base_url()}? "
+            "Pull a model with: ollama pull llama3.2"
+        ),
+    )
+
+
 def get_store_path(repo_path: str) -> Path:
     """Resolve the ChromaDB store path for a given repo."""
     return Path(repo_path).resolve() / ".repolix"
@@ -114,6 +151,8 @@ class QueryRequest(BaseModel):
     question: str
     repo_path: str
     no_llm: bool = False
+    provider: str | None = None
+    model: str | None = None
 
 
 class CitationModel(BaseModel):
@@ -151,6 +190,8 @@ class StatusResponse(BaseModel):
 class TourRequest(BaseModel):
     repo_path: str
     path_prefix: str | None = None
+    provider: str | None = None
+    model: str | None = None
 
 
 class TourResponse(BaseModel):
@@ -169,6 +210,8 @@ class TraceRequest(BaseModel):
     max_nodes: int = 20
     include_backward: bool = True
     explain: bool = False
+    provider: str | None = None
+    model: str | None = None
 
 
 class TraceResponse(BaseModel):
@@ -238,6 +281,7 @@ async def query_endpoint(request: QueryRequest):
         )
 
     client = get_openai_client()
+    provider, model = resolve_generation(request.provider, request.model)
 
     results = retrieve(
         query=request.question,
@@ -266,11 +310,19 @@ async def query_endpoint(request: QueryRequest):
             chunks_used=0,
         )
 
-    output = answer_query(
-        query=request.question,
-        results=results,
-        openai_client=client,
-    )
+    llm_client = get_generation_client(provider, embed_client=client)
+    try:
+        output = answer_query(
+            query=request.question,
+            results=results,
+            openai_client=llm_client,
+            model=model,
+            provider=provider,
+        )
+    except (APIConnectionError, APIStatusError) as exc:
+        if provider == "ollama":
+            raise ollama_http_error(exc) from exc
+        raise
 
     citations = [CitationModel(**c) for c in output["citations"]]
 
@@ -293,12 +345,21 @@ def tour_endpoint(req: TourRequest):
     from repolix.tour import generate_tour
     repo_path = Path(req.repo_path).resolve()
     store_path = repo_path / ".repolix"
-    result = generate_tour(
-        store_path=store_path,
-        repo_path=repo_path,
-        openai_client=get_openai_client(),
-        path_prefix=req.path_prefix,
-    )
+    provider, model = resolve_generation(req.provider, req.model)
+    client = get_generation_client(provider)
+    try:
+        result = generate_tour(
+            store_path=store_path,
+            repo_path=repo_path,
+            openai_client=client,
+            path_prefix=req.path_prefix,
+            model=model,
+            provider=provider,
+        )
+    except (APIConnectionError, APIStatusError) as exc:
+        if provider == "ollama":
+            raise ollama_http_error(exc) from exc
+        raise
     return TourResponse(**result)
 
 
@@ -313,16 +374,24 @@ def trace_endpoint(req: TraceRequest):
     from repolix.trace import run_trace
     repo_path = Path(req.repo_path).resolve()
     store_path = repo_path / ".repolix"
-    client = get_openai_client() if req.explain else None
-    result = run_trace(
-        symbol=req.symbol,
-        store_path=store_path,
-        max_depth=req.max_depth,
-        max_nodes=req.max_nodes,
-        include_backward=req.include_backward,
-        openai_client=client,
-        explain=req.explain,
-    )
+    provider, model = resolve_generation(req.provider, req.model)
+    client = get_generation_client(provider) if req.explain else None
+    try:
+        result = run_trace(
+            symbol=req.symbol,
+            store_path=store_path,
+            max_depth=req.max_depth,
+            max_nodes=req.max_nodes,
+            include_backward=req.include_backward,
+            openai_client=client,
+            explain=req.explain,
+            model=model,
+            provider=provider,
+        )
+    except (APIConnectionError, APIStatusError) as exc:
+        if provider == "ollama":
+            raise ollama_http_error(exc) from exc
+        raise
     return TraceResponse(
         symbol=result["symbol"],
         tree_str=result["tree_str"],

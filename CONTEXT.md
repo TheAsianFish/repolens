@@ -8,13 +8,13 @@ Update this file at the end of every milestone before moving on.
 
 ## New chat — start here
 
-**Next work: Milestone 23 — repolix 0.3.0 Ollama generation only.**
+**Next work: Milestone 24 — repolix 0.3.1 local embeddings via Ollama.**
 Do not restyle the UI, do not add tour/trace to the SPA, do not
-implement local embeddings (that is 0.3.1). One feature per version.
+mix extra CLI commands into that PR. One feature per version.
 
-Latest shipped: **0.2.4** on PyPI (https://pypi.org/project/repolix/0.2.4/).
-GitHub `main` is in sync. Working tree should be clean except local
-`.env` / `.repolix/`.
+Latest on PyPI: **0.2.4** (https://pypi.org/project/repolix/0.2.4/).
+Package version is **0.3.0** (Ollama generation) — publish when
+asked. Working tree should be clean except local `.env` / `.repolix/`.
 
 Keep `__version__` in `repolix/__init__.py` identical to
 `pyproject.toml` `[project].version`. 0.2.4 fixed a drift (it was
@@ -47,21 +47,23 @@ Published on PyPI as `repolix` (previously developed under the name
 ### Resume claims (must stay true)
 
 These three bullets are the interview baseline. Do not contradict them
-in code or docs. Bullet 3 is only fully true after 0.3.0 (Ollama) and
-0.3.1 (local embeddings).
+in code or docs. Bullet 3 generation half is true as of 0.3.0. Bullet 3
+embeddings half (and "code never leaves") waits on 0.3.1.
 
 - Published a local-first AI developer tool on PyPI that answers
   natural-language questions about Python, JavaScript, and TypeScript
   repos with exact file and line citations. **True as of 0.2.4**,
-  except "local-first" still sends source to OpenAI until 0.3.1.
+  except "local-first" still sends source to OpenAI embeddings until
+  0.3.1. Generation can stay on-machine via `--provider ollama`.
 - Engineered an AST-aware retrieval pipeline with Tree-sitter that
   fuses vector and keyword search via Reciprocal Rank Fusion and
   expands context through call graphs to ground LLM responses. **True.**
   Call graph is static name-level callees, not full program analysis.
 - Integrated Ollama inference and SHA-256 incremental indexing,
   eliminating external LLM inference costs while cutting repeat
-  embedding spend ∼95% on small incremental updates. **SHA-256 and
-  the ~95% story are true. Ollama is not implemented yet (0.3.0).**
+  embedding spend ∼95% on small incremental updates. **Ollama
+  generation is implemented (0.3.0). SHA-256 and the ~95% story
+  are true (see measurement below). Local embeddings are 0.3.1.**
 
 ---
 
@@ -73,7 +75,7 @@ in code or docs. Bullet 3 is only fully true after 0.3.0 (Ollama) and
 | AST parsing | Tree-sitter | Fast, accurate, multi-language ready |
 | Embeddings | text-embedding-3-small (OpenAI) | Current default. 0.3.1 adds local embeddings via Ollama. Switching embed models requires a full re-index. |
 | Vector store | ChromaDB (persistent, in-process) | Local-first, no server needed |
-| LLM | gpt-5.4-mini (OpenAI) | Current default. 0.3.0 adds Ollama for generation. Retrieval stays useful with `--no-llm`. |
+| LLM | gpt-5.4-mini (OpenAI) or Ollama | Default OpenAI. 0.3.0 adds `--provider ollama` for generation via `http://localhost:11434/v1`. Retrieval stays useful with `--no-llm`. |
 | Web server | FastAPI | Async, simple, automatic validation |
 | Frontend | React + TypeScript | SPA served by FastAPI from frontend/dist; dev via Vite at localhost:3000 |
 | CLI | Click + Rich | Click handles commands/args; Rich handles styled terminal output |
@@ -257,7 +259,8 @@ Hash IDs: "{absolute_file_path}"
 | repolix/chunker.py | Complete | AST parsing, chunk + metadata extraction, is_truncated flag |
 | repolix/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator; lookup_by_exact_name for exact symbol lookup |
 | repolix/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion; display_rel_path_from_meta for safe citation paths |
-| repolix/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing, CITATIONS block stripping; answer_trace for trace explanations |
+| repolix/llm.py | Complete | Prompt construction, chat completions (OpenAI or Ollama), citation parsing, CITATIONS block stripping; answer_trace for trace explanations |
+| repolix/providers.py | Complete | Provider/model resolution, OpenAI embed client, Ollama LLM client via base_url, token-limit kwargs |
 | repolix/tour.py | Complete | Call-graph analysis, entry point detection, chunk selection, context formatting, generate_tour orchestrator |
 | repolix/trace.py | Complete | BFS forward trace, backward trace (reverse lookup), format_trace_tree, run_trace orchestrator; lookup_chunk_by_name → lookup_by_exact_name |
 | repolix/cli.py | Complete | Click CLI — index, query, tour, and trace commands, confidence label |
@@ -278,14 +281,15 @@ the embedding logic lives in store.py as _embed_texts and build_embed_text.
 | tests/test_chunker.py | 23 | Passing |
 | tests/test_store.py | 33 | Passing |
 | tests/test_retriever.py | 25 | Passing |
-| tests/test_llm.py | 36 | Passing |
-| tests/test_cli.py | 12 | Passing |
-| tests/test_api.py | 9 | Passing |
+| tests/test_llm.py | 37 | Passing |
+| tests/test_cli.py | 14 | Passing |
+| tests/test_api.py | 11 | Passing |
 | tests/test_tour.py | 24 | Passing |
 | tests/test_trace.py | 21 | Passing |
+| tests/test_providers.py | 17 | Passing |
 
 Run all tests: pytest tests/ -v
-Total: 219 passing
+Total: 241 passing
 
 Note: test counts above are approximate. Always trust the actual
 pytest output over this table.
@@ -318,14 +322,14 @@ pytest output over this table.
 | 20 | repolix trace command: BFS call-graph traversal, forward/reverse/explain modes | Complete |
 | 21 | repolix 0.2.3 — trace output quality: BUILTIN_NAMES filter + citation test coverage | Complete |
 | 22 | repolix 0.2.4 — exact-name lookup for trace (`lookup_by_exact_name`) | Complete |
-| 23 | repolix 0.3.0 — Ollama generation provider | Planned |
+| 23 | repolix 0.3.0 — Ollama generation provider | Complete |
 | 24 | repolix 0.3.1 — local embeddings via Ollama | Planned |
 | 25 | repolix 0.3.2 — `repolix status` + richer GET /status | Planned |
 
 V1 shipped as repolix 0.1.0 on PyPI; **0.1.1** followed (UI polish and fixes).
 **0.2.2** shipped `repolix tour`. **0.2.3** shipped `repolix trace`.
-**0.2.4** shipped exact-name lookup for `trace`. Next is **0.3.0**
-Ollama generation.
+**0.2.4** shipped exact-name lookup for `trace`. **0.3.0** shipped
+Ollama generation. Next is **0.3.1** local embeddings.
 
 ---
 
@@ -515,10 +519,11 @@ HTTP/SPA backend; the CLI does not go through FastAPI.
 
 **Honesty (current runtime vs product goal).** ChromaDB, Tree-sitter,
 and keyword search are local. Indexing still sends enriched chunk text
-to OpenAI embeddings; `query` / `tour` / `trace --explain` still send
-retrieved source to OpenAI chat. `query --no-llm` skips generation but
-still embeds the query via OpenAI. "Code never leaves the machine" is
-the 0.3.1 goal, not the current default. README overclaims this today.
+to OpenAI embeddings. `query` search still embeds the question via
+OpenAI, including `--no-llm`. Generation (`query` / `tour` /
+`trace --explain`) can use OpenAI or `--provider ollama`.
+"Code never leaves the machine" is the 0.3.1 goal, not the default
+while embeddings stay on OpenAI.
 
 **Call graph — do not overclaim.** Static, name-only callees extracted
 at chunk time from AST call nodes (`foo()` → `foo`; `obj.bar()` → `bar`).
@@ -528,21 +533,20 @@ pick one chunk (file_path + start_line). Dynamic dispatch, aliases,
 `getattr`, JS prototypes: not handled. Interview phrasing: name-level
 static callees stored per chunk, used to expand retrieval and walk a tree.
 
-**~95% incremental embedding savings.** Mechanism is real (SHA-256 per
-file in `repolix_hashes`; unchanged files skip embed; orphans cleaned).
-The number is back-of-envelope from README cost table: full index ~$0.02
-vs small re-index ~$0.001. Interview story: N files, 1 changed → skip
-(N−1)/N of embedding API calls. Re-measure on this repo at 0.3.0 docs
-time and record actual skipped/indexed counts here. Do not invent a
-new experiment number without running it.
+**~95% incremental embedding savings (measured 2026-08-15 on this repo).**
+SHA-256 per file in `repolix_hashes`; unchanged files skip embed; orphans
+cleaned. Walker found **22** indexable files (tests excluded). Unchanged
+re-index: **22 skipped, 0 indexed** (100% of embedding calls skipped).
+One changed file would skip 21/22 ≈ **95.5%**. Do not invent a new
+experiment number without running it.
 
-**Ollama implementation constraint.** OpenAI SDK is threaded through
-`cli.py`, `api.py`, `store.py`, `llm.py` as a concrete `OpenAI` client.
-Do not rewrite the pipeline. 0.3.0 should keep that SDK and point
-`base_url` at Ollama's OpenAI-compatible server (`http://localhost:11434/v1`)
-with a provider/model setting. OpenAI remains an option. Switching
-embedding models changes vector space — full re-index required. Do not
-mix local embeddings into the 0.3.0 generation PR.
+**Ollama generation (0.3.0, complete).** Same OpenAI SDK. Provider
+`ollama` sets `base_url` to `http://localhost:11434/v1` (override
+`REPOLIX_OLLAMA_BASE_URL`). Dummy api_key `ollama`. Chat uses
+`max_tokens`; OpenAI chat still uses `max_completion_tokens`.
+Default Ollama model: `llama3.2`. Embeddings stay OpenAI until 0.3.1.
+Switching embedding models changes vector space — full re-index
+required. Do not mix local embeddings into a later unrelated PR.
 
 ### Milestone 22 — 0.2.4 (complete)
 
@@ -567,17 +571,28 @@ stripped inside Rich `Panel` because brackets are parsed as markup.
 Callers below the panel render correctly. Fix with `rich.markup.escape`
 on `tree_str` in a later polish pass.
 
-### Milestone 23 — 0.3.0 Ollama generation
+### Milestone 23 — 0.3.0 Ollama generation (complete)
 
 Closes resume bullet 3 as written ("Integrated Ollama inference")
-without yet making embeddings local.
+without making embeddings local. OpenAI remains the default provider.
+`index` and `query` search still need `OPENAI_API_KEY`. `tour` and
+`trace --explain` with `--provider ollama` do not.
 
-- Chat completions for `query`, `tour`, `trace --explain` via Ollama
-- OpenAI remains a selectable provider
-- `OPENAI_API_KEY` not required when provider is Ollama
-- Indexing may still use OpenAI embeddings in this release — say so
-  in README
-- Document the 95% measurement with real skipped/indexed counts
+| Change | Files | Status |
+|---|---|---|
+| Provider/model helpers; Ollama client via `base_url` | `repolix/providers.py` | Complete |
+| Pass `model`/`provider` into chat completions; `max_tokens` for Ollama | `repolix/llm.py` | Complete |
+| `--provider` / `--model` on query, tour, trace | `repolix/cli.py` | Complete |
+| Optional `provider`/`model` on query, tour, trace request bodies | `repolix/api.py` | Complete |
+| Thread model/provider through tour and trace orchestrators | `repolix/tour.py`, `repolix/trace.py` | Complete |
+| Provider tests + CLI/API/LLM coverage | `tests/test_providers.py` and others | Complete |
+| Bump 0.3.0; sync `__version__` | `pyproject.toml`, `repolix/__init__.py` | Complete |
+| README Ollama section + measured skip counts | `README.md` | Complete |
+
+Flags also read `REPOLIX_LLM_PROVIDER`, `REPOLIX_LLM_MODEL`,
+`REPOLIX_OLLAMA_BASE_URL`. Default Ollama model is `llama3.2`.
+Do not publish until asked; PyPI 0.2.4 is still the live public
+release until 0.3.0 is uploaded.
 
 ### Milestone 24 — 0.3.1 local embeddings
 
@@ -613,7 +628,7 @@ inline. No light mode, no useful mobile layout (45%/55% grid).
 wraps `/status`, `/index`, `/query`. That is a functionality gap,
 not a CSS gap.
 
-Do not put a visual redesign or tour/trace UI into 0.3.0. If UI
+Do not put a visual redesign or tour/trace UI into 0.3.1. If UI
 work happens, it is after 0.3.1, as its own version, functional
 first (wire tour/trace, move inline styles to CSS, one mobile
 breakpoint). Not a new palette or design system before interviews.
@@ -632,7 +647,7 @@ smart truncation. Move these to backlog; they are not resume blockers.
 - `repolix tour` — proactive orientation briefing ✓ Done in V2-2
 - `repolix trace` — call graph traversal for any named function ✓ Done in V2-3
 - Exact-name lookup for `trace` (0.2.4) ✓
-- Ollama generation (0.3.0) — planned
+- Ollama generation (0.3.0) ✓
 - Local embeddings via Ollama (0.3.1) — planned
 - `repolix status` + richer GET /status (0.3.2) — planned
 
@@ -760,7 +775,7 @@ Sequence:
   cap. Common identifiers (retrieve, query, index) appear in many chunks
   and the real function can fall outside the cap. Use lookup_by_exact_name
   (ChromaDB where={"name": name}) instead.
-- Do not mix local embeddings into the 0.3.0 generation change —
+- Do not mix local embeddings into a generation-only change —
   embeddings are 0.3.1. One feature per version.
 - Do not rewrite cli/api/store/llm around a new LLM SDK for Ollama —
   keep the OpenAI client and set base_url to Ollama's compatible endpoint.

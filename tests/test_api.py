@@ -6,9 +6,11 @@ without a real server. index_repo, retrieve, and answer_query
 are mocked throughout.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch
 from fastapi.testclient import TestClient
+
 from repolix.api import app
 
 client = TestClient(app)
@@ -143,6 +145,57 @@ class TestQueryEndpoint:
 
         assert response.status_code == 200
         assert response.json()["answer"] is None
+
+
+class TestOllamaGenerationApi:
+
+    def test_query_ollama_passes_provider(self, tmp_path):
+        store = tmp_path / ".repolix"
+        store.mkdir()
+        (store / "chroma.sqlite3").touch()
+
+        mock_answer = {
+            "answer": "foo handles auth [1].",
+            "citations": [{
+                "label": "[1]",
+                "file_rel_path": "foo.py",
+                "start_line": 1,
+                "end_line": 1,
+                "name": "foo",
+                "parent_class": None,
+            }],
+            "chunks_used": 1,
+        }
+
+        with patch("repolix.api.get_openai_client"), \
+             patch("repolix.api.get_llm_client") as mock_llm, \
+             patch("repolix.api.retrieve", return_value=mock_results()), \
+             patch("repolix.api.answer_query", return_value=mock_answer) as mock_ans:
+            mock_llm.return_value = MagicMock()
+            response = client.post("/query", json={
+                "question": "how does auth work",
+                "repo_path": str(tmp_path),
+                "provider": "ollama",
+                "model": "llama3.2",
+            })
+
+        assert response.status_code == 200, response.json()
+        kwargs = mock_ans.call_args.kwargs
+        assert kwargs["provider"] == "ollama"
+        assert kwargs["model"] == "llama3.2"
+        mock_llm.assert_called_once()
+
+    def test_invalid_provider_returns_400(self, tmp_path):
+        store = tmp_path / ".repolix"
+        store.mkdir()
+        (store / "chroma.sqlite3").touch()
+        with patch("repolix.api.get_openai_client"):
+            response = client.post("/query", json={
+                "question": "how does auth work",
+                "repo_path": str(tmp_path),
+                "provider": "anthropic",
+            })
+        assert response.status_code == 400
 
 
 class TestStatusEndpoint:

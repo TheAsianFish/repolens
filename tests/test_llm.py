@@ -5,15 +5,17 @@ OpenAI calls are mocked. We test prompt construction, citation
 parsing, and the full answer_query pipeline without hitting the API.
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
+
 from repolix.llm import (
+    MAX_CONTEXT_CHUNKS,
+    _parse_sections,
+    _strip_citations_block,
+    answer_query,
     build_prompt,
     parse_citations,
-    answer_query,
-    _strip_citations_block,
-    _parse_sections,
-    MAX_CONTEXT_CHUNKS,
 )
 
 
@@ -249,6 +251,21 @@ class TestAnswerQuery:
         call_kwargs = client.chat.completions.create.call_args.kwargs
         assert "max_completion_tokens" in call_kwargs
         assert call_kwargs["max_completion_tokens"] == 1024
+
+    def test_ollama_uses_max_tokens_and_model(self):
+        client = mock_openai("Answer.")
+        results = [make_result()]
+        answer_query(
+            "query",
+            results,
+            client,
+            model="llama3.2",
+            provider="ollama",
+        )
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["model"] == "llama3.2"
+        assert call_kwargs["max_tokens"] == 1024
+        assert "max_completion_tokens" not in call_kwargs
 
 
 class TestParseSections:

@@ -309,6 +309,8 @@ def generate_tour(
     repo_path: str | Path,
     openai_client: OpenAI,
     path_prefix: str | None = None,
+    model: str | None = None,
+    provider: str = "openai",
 ) -> dict:
     """
     Run the full tour pipeline and return a structured briefing.
@@ -360,8 +362,13 @@ def generate_tour(
         _all_chunks=all_chunks,
     )
 
-    from repolix.llm import answer_tour
-    result = answer_tour(context, openai_client)
+    from repolix.llm import LLM_MODEL, answer_tour
+    result = answer_tour(
+        context,
+        openai_client,
+        model=model or LLM_MODEL,
+        provider=provider,
+    )
 
     top_functions = sorted(
         inbound_counts.items(),
