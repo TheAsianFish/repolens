@@ -260,6 +260,7 @@ bash start.sh
 - Deeply nested functions are included in their parent chunk
 - Large functions (>300 tokens) are truncated at the chunk cap
 - Complex cross-file reasoning may require rephrasing the query
+- Indexing and answer generation currently use OpenAI; local Ollama support is the 0.3.x line
 
 ---
 
@@ -268,13 +269,16 @@ bash start.sh
 **Shipped in V2**
 - `.ts`, `.tsx`, `.js`, `.jsx` indexing via Tree-sitter JavaScript/TypeScript grammars
 - `repolix tour` — proactive orientation briefing driven by call-graph metadata (0.2.2)
-- `repolix trace` — BFS call-graph traversal with forward/reverse/explain modes (0.2.3) ✓
+- `repolix trace` — BFS call-graph traversal with forward/reverse/explain modes (0.2.3)
 
-**Next in V2**
-- Local model support via Ollama (zero API cost, fully air-gapped)
-- Persistent query sessions across terminal restarts
+**Next**
+- 0.2.4 — exact-name lookup for `trace` (in progress)
+- 0.3.0 — Ollama for answer generation (OpenAI remains optional)
+- 0.3.1 — local embeddings so indexing and search need no external API
+- 0.3.2 — `repolix status` (index stats, provider, model)
 
-**Considering for V3**
+**Backlog**
+- MCP server so AI coding tools can call the same retrieve / trace operations
 - VS Code extension
 - Multi-repo support
 

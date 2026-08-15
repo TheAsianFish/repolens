@@ -16,6 +16,10 @@ Free and open source. Built for developer tooling.
 Published on PyPI as `repolix` (previously developed under the name
 `codesight`; renamed before public launch).
 
+**Current line:** Milestone 22 (0.2.4, uncommitted) then 0.3.x Ollama.
+See "Current development line (0.2.4 → 0.3.x)" below. Generation and
+embeddings still use OpenAI until those milestones land.
+
 ---
 
 ## Tech stack
@@ -24,9 +28,9 @@ Published on PyPI as `repolix` (previously developed under the name
 |---|---|---|
 | Language | Python 3.11+ | Ecosystem, tooling, pip distribution |
 | AST parsing | Tree-sitter | Fast, accurate, multi-language ready |
-| Embeddings | text-embedding-3-small | Cheap, high quality, 1536 dims |
+| Embeddings | text-embedding-3-small (OpenAI) | Current default. 0.3.1 adds local embeddings via Ollama. Switching embed models requires a full re-index. |
 | Vector store | ChromaDB (persistent, in-process) | Local-first, no server needed |
-| LLM | gpt-5.4-mini | Fast, cheap, strong instruction following |
+| LLM | gpt-5.4-mini (OpenAI) | Current default. 0.3.0 adds Ollama for generation. Retrieval stays useful with `--no-llm`. |
 | Web server | FastAPI | Async, simple, automatic validation |
 | Frontend | React + TypeScript | SPA served by FastAPI from frontend/dist; dev via Vite at localhost:3000 |
 | CLI | Click + Rich | Click handles commands/args; Rich handles styled terminal output |
@@ -270,12 +274,16 @@ pytest output over this table.
 | 19 | repolix 0.2.2 — tour command: proactive orientation briefing via call-graph analysis | Complete |
 | 20 | repolix trace command: BFS call-graph traversal, forward/reverse/explain modes | Complete |
 | 21 | repolix 0.2.3 — trace output quality: BUILTIN_NAMES filter + citation test coverage | Complete |
+| 22 | repolix 0.2.4 — exact-name lookup for trace (`lookup_by_exact_name`) | In progress |
+| 23 | repolix 0.3.0 — Ollama generation provider | Planned |
+| 24 | repolix 0.3.1 — local embeddings via Ollama | Planned |
+| 25 | repolix 0.3.2 — `repolix status` + richer GET /status | Planned |
 
 V1 shipped as repolix 0.1.0 on PyPI; **0.1.1** followed (UI polish and fixes).
-**0.2.2** shipped `repolix tour`. **0.2.3** ships `repolix trace` — BFS
-call-graph traversal for any named function, zero API calls by default,
-optional `--explain` for a single LLM narration, and output quality fixes
-(builtin filter + file/line citations on every node).
+**0.2.2** shipped `repolix tour`. **0.2.3** shipped `repolix trace`.
+**Current line:** 0.2.4 (uncommitted bugfix) then 0.3.x Ollama. See
+"Current development line" below. Do not start 0.3.0 until 0.2.4 is
+committed and published.
 
 ---
 
@@ -452,19 +460,126 @@ Key design decisions:
 
 ---
 
+## Current development line (0.2.4 → 0.3.x)
+
+Resume-driven sequence. One feature per version. CLI commands stay
+`index`, `query`, `tour`, `trace` — do not rename. FastAPI stays the
+HTTP/SPA backend; the CLI does not go through FastAPI.
+
+**Honesty (current runtime vs product goal).** ChromaDB, Tree-sitter,
+and keyword search are local. Indexing still sends enriched chunk text
+to OpenAI embeddings; `query` / `tour` / `trace --explain` still send
+retrieved source to OpenAI chat. `query --no-llm` skips generation but
+still embeds the query via OpenAI. "Code never leaves the machine" is
+the 0.3.1 goal, not the current default. README overclaims this today.
+
+**Call graph — do not overclaim.** Static, name-only callees extracted
+at chunk time from AST call nodes (`foo()` → `foo`; `obj.bar()` → `bar`).
+Not resolved through imports, types, or runtime. `tour`, `trace`, and
+`expand_via_call_graph` all reuse the same `calls` list. Ambiguous names
+pick one chunk (file_path + start_line). Dynamic dispatch, aliases,
+`getattr`, JS prototypes: not handled. Interview phrasing: name-level
+static callees stored per chunk, used to expand retrieval and walk a tree.
+
+**~95% incremental embedding savings.** Mechanism is real (SHA-256 per
+file in `repolix_hashes`; unchanged files skip embed; orphans cleaned).
+The number is back-of-envelope from README cost table: full index ~$0.02
+vs small re-index ~$0.001. Interview story: N files, 1 changed → skip
+(N−1)/N of embedding API calls. Re-measure on this repo at 0.3.0 docs
+time and record actual skipped/indexed counts here. Do not invent a
+new experiment number without running it.
+
+**Ollama implementation constraint.** OpenAI SDK is threaded through
+`cli.py`, `api.py`, `store.py`, `llm.py` as a concrete `OpenAI` client.
+Do not rewrite the pipeline. 0.3.0 should keep that SDK and point
+`base_url` at Ollama's OpenAI-compatible server (`http://localhost:11434/v1`)
+with a provider/model setting. OpenAI remains an option. Switching
+embedding models changes vector space — full re-index required. Do not
+mix local embeddings into the 0.3.0 generation PR.
+
+### Milestone 22 — 0.2.4 (in progress, uncommitted)
+
+Exact-name lookup so `repolix trace retrieve` cannot miss a real symbol
+because `keyword_search(..., n_results=5)` ranked other documents first.
+
+| Change | Files | Status |
+|---|---|---|
+| Add `lookup_by_exact_name` (ChromaDB `where={"name": name}`) | `repolix/store.py` | Written, uncommitted |
+| `lookup_chunk_by_name` delegates to it | `repolix/trace.py` | Written, uncommitted |
+| Tests for exact lookup + keyword-cap regression | `tests/test_store.py`, `tests/test_trace.py` | Written, uncommitted |
+| Publish 0.2.4 to PyPI | — | Not started |
+
+Also in this release: align README/CONTEXT roadmaps (this section).
+`expand_via_call_graph` still uses `keyword_search(n_results=3)` — same
+class of bug; fix in a later polish pass, not this PR.
+
+Known leftover (not 0.2.4): `trace` tree `[file:line]` citations are
+stripped inside Rich `Panel` because brackets are parsed as markup.
+Callers below the panel render correctly. Fix with `rich.markup.escape`
+on `tree_str` in a later polish pass.
+
+### Milestone 23 — 0.3.0 Ollama generation
+
+Closes resume bullet 3 as written ("Integrated Ollama inference")
+without yet making embeddings local.
+
+- Chat completions for `query`, `tour`, `trace --explain` via Ollama
+- OpenAI remains a selectable provider
+- `OPENAI_API_KEY` not required when provider is Ollama
+- Indexing may still use OpenAI embeddings in this release — say so
+  in README
+- Document the 95% measurement with real skipped/indexed counts
+
+### Milestone 24 — 0.3.1 local embeddings
+
+Makes "local-first" actually true. Ollama (or equivalent) embeddings
+so `index` and vector search need no OpenAI. Re-index required when
+switching embed models.
+
+### Milestone 25 — 0.3.2 status
+
+`repolix status`: repo, file/chunk counts, provider, model, index
+freshness. Enrich `GET /status` (today it only returns `indexed: bool`).
+Demo/interview polish, not a resume headline.
+
+### After 0.3.2 (only if time)
+
+- Use `lookup_by_exact_name` in `expand_via_call_graph`
+- Escape Rich markup on `trace` trees
+- Tiny retrieval eval on this repo (5–10 questions → expected files)
+- MCP as a thin wrapper around `retrieve` / `lookup_by_exact_name` /
+  `run_trace` — **0.4.0**, optional and additive. Do not redesign
+  around MCP. A working CLI with no MCP must still make sense.
+- `query --no-llm` plus `trace` already cover "context package for a
+  task". A dedicated `context` command is optional later, not resume-critical.
+
+### Explicitly not this cycle
+
+VS Code extension, Slack bot, GitHub webhooks, multi-repo, dependency
+graph visualization, persistent query sessions, secret-pattern filter,
+smart truncation. Move these to backlog; they are not resume blockers.
+
+---
+
 ## V2 Roadmap
 
 - TypeScript / JavaScript support (Tree-sitter parser swap) ✓ Done in V2-1
 - `repolix tour` — proactive orientation briefing ✓ Done in V2-2
 - `repolix trace` — call graph traversal for any named function ✓ Done in V2-3
+- Exact-name lookup for `trace` (0.2.4) — in progress
+- Ollama generation (0.3.0) — planned
+- Local embeddings via Ollama (0.3.1) — planned
+- `repolix status` + richer GET /status (0.3.2) — planned
+
+## Backlog (not 0.3.x)
+
+- MCP server wrapping existing retrieve / lookup / trace (0.4.0 candidate)
 - VS Code extension wrapper
 - Dependency graph visualization
-- Secret pattern filter in walker.py (skip files with hardcoded credentials)
+- Secret pattern filter in walker.py
 - Smart truncation: preserve head + tail of oversized chunks
 - Index-time warning for truncated chunks
-
-## V3 Roadmap
-
+- Persistent query sessions
 - GitHub webhook integration (re-index on push)
 - Multi-repo support
 - Slack bot
@@ -575,3 +690,19 @@ Sequence:
 - Do not call lookup_chunk_by_name for names in BUILTIN_NAMES — filter them
   with `if call_name in BUILTIN_NAMES: continue` before the lookup to avoid
   wasted ChromaDB roundtrips and spurious tree nodes.
+- Do not use keyword_search to look up a chunk by function name —
+  keyword_search is substring matching on document text with an n_results
+  cap. Common identifiers (retrieve, query, index) appear in many chunks
+  and the real function can fall outside the cap. Use lookup_by_exact_name
+  (ChromaDB where={"name": name}) instead.
+- Do not start 0.3.0 Ollama work until 0.2.4 is committed and published.
+- Do not mix local embeddings into the 0.3.0 generation change —
+  embeddings are 0.3.1. One feature per version.
+- Do not rewrite cli/api/store/llm around a new LLM SDK for Ollama —
+  keep the OpenAI client and set base_url to Ollama's compatible endpoint.
+- Do not claim the call graph resolves definitions, imports, or runtime
+  dispatch — it is static name-level callees stored on each chunk.
+- Do not add MCP, a VS Code extension, or extra CLI commands until
+  0.3.1 makes the local-first claim true.
+- Do not pass trace tree_str into a Rich Panel without
+  rich.markup.escape() — `[file:line]` is parsed as markup and vanishes.

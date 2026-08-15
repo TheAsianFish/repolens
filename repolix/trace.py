@@ -20,7 +20,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from repolix.store import keyword_search, CHUNKS_COLLECTION, _get_client
+from repolix.store import lookup_by_exact_name
 from repolix.retriever import display_rel_path_from_meta
 from repolix.tour import BUILTIN_NAMES
 
@@ -30,24 +30,16 @@ TRACE_MAX_NODES = 20
 
 def lookup_chunk_by_name(name: str, store_path) -> dict | None:
     """
-    Find a chunk by exact function/class name using keyword_search.
+    Find a chunk by exact function/class name.
 
-    Uses the same pattern as expand_via_call_graph in retriever.py:
-    keyword_search returns candidates, we verify exact name match.
+    Delegates to store.lookup_by_exact_name so common identifiers
+    that appear in many documents (retrieve, query, index) are not
+    lost behind keyword_search's n_results cap.
 
-    Returns the first exact match dict or None if not found.
-    The returned dict has calls as a list[str] — keyword_search
-    already splits the comma-joined string.
+    Returns the matching chunk dict or None if not found.
+    The returned dict has calls as a list[str].
     """
-    matches = keyword_search(
-        query=name,
-        store_path=store_path,
-        n_results=5,
-    )
-    for match in matches:
-        if match["name"] == name:
-            return match
-    return None
+    return lookup_by_exact_name(name, store_path)
 
 
 def forward_trace(

@@ -16,6 +16,7 @@ from repolix.store import (
     index_chunks,
     index_repo,
     keyword_search,
+    lookup_by_exact_name,
     query_chunks,
     EMBEDDING_MODEL,
 )
@@ -387,3 +388,88 @@ class TestKeywordSearch:
 
         results = keyword_search("walk repo", db_path)
         assert results[0]["name"] == "walk_repo"
+
+
+class TestLookupByExactName:
+
+    def test_finds_chunk_by_exact_name(self, tmp_path):
+        chunk = make_chunk(name="retrieve", source="def retrieve(query): pass")
+        db = _index_chunk(chunk, tmp_path)
+        result = lookup_by_exact_name("retrieve", db)
+        assert result is not None
+        assert result["name"] == "retrieve"
+        assert result["calls"] == ["validate_token"]
+
+    def test_returns_none_when_name_absent(self, tmp_path):
+        chunk = make_chunk(name="retrieve", source="def retrieve(query): pass")
+        db = _index_chunk(chunk, tmp_path)
+        assert lookup_by_exact_name("nonexistent", db) is None
+
+    def test_does_not_match_substring_names(self, tmp_path):
+        chunk = make_chunk(name="retrieve_all", source="def retrieve_all(): pass")
+        db = _index_chunk(chunk, tmp_path)
+        assert lookup_by_exact_name("retrieve", db) is None
+
+    def test_finds_name_even_when_keyword_search_would_miss_it(self, tmp_path):
+        """
+        Regression: lookup_chunk_by_name used keyword_search(n_results=5).
+        Common identifiers appear in many documents, so the real function
+        can fall outside that cap and look missing.
+        """
+        src = tmp_path / "src.py"
+        src.write_text("placeholder")
+        db_path = tmp_path / "db"
+        client = mock_openai_client()
+
+        mentions = [
+            make_chunk(
+                file_path=str(src),
+                name=f"mention_{i}",
+                source=f"def mention_{i}(): retrieve()",
+                start_line=i + 1,
+                end_line=i + 1,
+                calls=["retrieve"],
+            )
+            for i in range(8)
+        ]
+        target = make_chunk(
+            file_path=str(src),
+            name="retrieve",
+            source="def retrieve(query): pass",
+            start_line=100,
+            end_line=110,
+            calls=["query_chunks"],
+        )
+        index_chunks(mentions + [target], src, db_path, client)
+
+        result = lookup_by_exact_name("retrieve", db_path)
+        assert result is not None
+        assert result["name"] == "retrieve"
+        assert result["calls"] == ["query_chunks"]
+
+    def test_picks_deterministically_when_names_collide(self, tmp_path):
+        src = tmp_path / "src.py"
+        src.write_text("placeholder")
+        db_path = tmp_path / "db"
+        client = mock_openai_client()
+
+        later = make_chunk(
+            file_path=str(tmp_path / "z.py"),
+            name="validate",
+            source="def validate(): pass",
+            start_line=1,
+            end_line=2,
+        )
+        earlier = make_chunk(
+            file_path=str(tmp_path / "a.py"),
+            name="validate",
+            source="def validate(): pass",
+            start_line=10,
+            end_line=12,
+        )
+        index_chunks([later, earlier], src, db_path, client)
+
+        result = lookup_by_exact_name("validate", db_path)
+        assert result is not None
+        assert result["file_path"] == str(tmp_path / "a.py")
+        assert result["start_line"] == 10

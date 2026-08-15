@@ -409,6 +409,55 @@ def keyword_search(
     return [result_map[k] for k in sorted_keys[:n_results]]
 
 
+def lookup_by_exact_name(name: str, store_path: str | Path) -> dict | None:
+    """
+    Find a chunk whose metadata name equals `name` exactly.
+
+    Uses ChromaDB's metadata where-filter. keyword_search is
+    substring matching on document text with a result cap — common
+    identifiers like retrieve or query appear in many chunks, so the
+    actual function can fall outside n_results and look "not found".
+
+    When multiple chunks share the same name (methods on different
+    classes), the earliest file_path + start_line wins so the pick
+    is deterministic.
+    """
+    db = _get_client(store_path)
+    chunks_col = db.get_or_create_collection(CHUNKS_COLLECTION)
+    results = chunks_col.get(
+        where={"name": name},
+        include=["documents", "metadatas"],
+    )
+    metadatas = results.get("metadatas") or []
+    documents = results.get("documents") or []
+    if not metadatas:
+        return None
+
+    paired = list(zip(documents, metadatas))
+    paired.sort(
+        key=lambda item: (
+            item[1].get("file_path", ""),
+            item[1].get("start_line", 0),
+        )
+    )
+    doc, meta = paired[0]
+    return {
+        "source": meta.get("source_text") or doc,
+        "file_path": meta["file_path"],
+        "file_rel_path": meta.get("file_rel_path", meta["file_path"]),
+        "name": meta["name"],
+        "node_type": meta["node_type"],
+        "start_line": meta["start_line"],
+        "end_line": meta["end_line"],
+        "token_count": meta.get("token_count", 0),
+        "calls": meta["calls"].split(",") if meta["calls"] else [],
+        "docstring": meta["docstring"] or None,
+        "parent_class": meta.get("parent_class") or None,
+        "is_truncated": meta.get("is_truncated", False),
+        "distance": 0.0,
+    }
+
+
 def index_repo(
     repo_path: str | Path,
     store_path: str | Path,

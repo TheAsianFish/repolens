@@ -51,22 +51,21 @@ def _lookup_factory(chunks_by_name: dict):
 
 def test_lookup_chunk_by_name_found(tmp_path):
     chunk = _make_chunk("retrieve", ["query_chunks"])
-    with patch("repolix.trace.keyword_search", return_value=[chunk]):
+    with patch("repolix.trace.lookup_by_exact_name", return_value=chunk):
         result = lookup_chunk_by_name("retrieve", tmp_path)
     assert result is not None
     assert result["name"] == "retrieve"
 
 
 def test_lookup_chunk_by_name_not_found(tmp_path):
-    with patch("repolix.trace.keyword_search", return_value=[]):
+    with patch("repolix.trace.lookup_by_exact_name", return_value=None):
         result = lookup_chunk_by_name("nonexistent", tmp_path)
     assert result is None
 
 
 def test_lookup_chunk_by_name_ignores_non_exact_matches(tmp_path):
-    """keyword_search may return substring matches; we only want exact name."""
-    close_match = _make_chunk("retrieve_all", ["x"])
-    with patch("repolix.trace.keyword_search", return_value=[close_match]):
+    """Substring names must not satisfy an exact lookup."""
+    with patch("repolix.trace.lookup_by_exact_name", return_value=None):
         result = lookup_chunk_by_name("retrieve", tmp_path)
     assert result is None
 
