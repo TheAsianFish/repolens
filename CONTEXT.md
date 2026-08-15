@@ -6,6 +6,34 @@ Update this file at the end of every milestone before moving on.
 
 ---
 
+## New chat — start here
+
+**Next work: Milestone 23 — repolix 0.3.0 Ollama generation only.**
+Do not restyle the UI, do not add tour/trace to the SPA, do not
+implement local embeddings (that is 0.3.1). One feature per version.
+
+Latest shipped: **0.2.4** on PyPI (https://pypi.org/project/repolix/0.2.4/).
+GitHub `main` is in sync. Working tree should be clean except local
+`.env` / `.repolix/`.
+
+Keep `__version__` in `repolix/__init__.py` identical to
+`pyproject.toml` `[project].version`. 0.2.4 fixed a drift (it was
+stuck at 0.2.2 while PyPI was 0.2.3).
+
+Twine: `.env` has `twine=pypi-...` (gitignored). Upload with
+`TWINE_USERNAME=__token__` and `TWINE_PASSWORD` from that value.
+Never paste tokens into chat. Never `twine upload dist/*` — old
+wheels sit in `dist/`; upload only `dist/repolix-X.Y.Z*`.
+
+Git remote still points at `TheAsianFish/repolens.git`; GitHub
+redirects to `TheAsianFish/repolix.git`. Push works; update the
+remote URL when convenient.
+
+Full plan, resume-claim audit, and Ollama constraints:
+"Current development line (0.2.4 → 0.3.x)" below.
+
+---
+
 ## What repolix is
 
 A local-first codebase context engine. Point it at any Python or
@@ -16,9 +44,24 @@ Free and open source. Built for developer tooling.
 Published on PyPI as `repolix` (previously developed under the name
 `codesight`; renamed before public launch).
 
-**Current line:** 0.2.4 shipped. Next is 0.3.0 Ollama generation.
-See "Current development line (0.2.4 → 0.3.x)" below. Generation and
-embeddings still use OpenAI until those milestones land.
+### Resume claims (must stay true)
+
+These three bullets are the interview baseline. Do not contradict them
+in code or docs. Bullet 3 is only fully true after 0.3.0 (Ollama) and
+0.3.1 (local embeddings).
+
+- Published a local-first AI developer tool on PyPI that answers
+  natural-language questions about Python, JavaScript, and TypeScript
+  repos with exact file and line citations. **True as of 0.2.4**,
+  except "local-first" still sends source to OpenAI until 0.3.1.
+- Engineered an AST-aware retrieval pipeline with Tree-sitter that
+  fuses vector and keyword search via Reciprocal Rank Fusion and
+  expands context through call graphs to ground LLM responses. **True.**
+  Call graph is static name-level callees, not full program analysis.
+- Integrated Ollama inference and SHA-256 incremental indexing,
+  eliminating external LLM inference costs while cutting repeat
+  embedding spend ∼95% on small incremental updates. **SHA-256 and
+  the ~95% story are true. Ollama is not implemented yet (0.3.0).**
 
 ---
 
@@ -212,14 +255,14 @@ Hash IDs: "{absolute_file_path}"
 |---|---|---|
 | repolix/walker.py | Complete | Filesystem traversal, file filtering |
 | repolix/chunker.py | Complete | AST parsing, chunk + metadata extraction, is_truncated flag |
-| repolix/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator |
+| repolix/store.py | Complete | Embeddings, ChromaDB storage, retrieval, index_repo orchestrator; lookup_by_exact_name for exact symbol lookup |
 | repolix/retriever.py | Complete | Hybrid search, RRF, re-ranking, call graph expansion; display_rel_path_from_meta for safe citation paths |
 | repolix/llm.py | Complete | Prompt construction, gpt-5.4-mini call, citation parsing, CITATIONS block stripping; answer_trace for trace explanations |
 | repolix/tour.py | Complete | Call-graph analysis, entry point detection, chunk selection, context formatting, generate_tour orchestrator |
-| repolix/trace.py | Complete | BFS forward trace, backward trace (reverse lookup), format_trace_tree, run_trace orchestrator |
+| repolix/trace.py | Complete | BFS forward trace, backward trace (reverse lookup), format_trace_tree, run_trace orchestrator; lookup_chunk_by_name → lookup_by_exact_name |
 | repolix/cli.py | Complete | Click CLI — index, query, tour, and trace commands, confidence label |
 | repolix/api.py | Complete | FastAPI backend — /index, /query, /tour, /trace, /status, /health; serves built SPA from frontend/dist |
-| frontend/src/ | Complete | React + TypeScript SPA; Vite dev server for development; built output served by FastAPI |
+| frontend/src/ | Complete | React SPA: index + query only. API has /tour and /trace; the SPA does not call them. Heavy inline styles. |
 | tests/conftest.py | Complete | Creates minimal frontend/dist stub before TestClient initialises |
 
 Note: repolix/embedder.py was deleted. It was an unimplemented stub;
@@ -233,7 +276,7 @@ the embedding logic lives in store.py as _embed_texts and build_embed_text.
 |---|---|---|
 | tests/test_walker.py | 11 | Passing |
 | tests/test_chunker.py | 23 | Passing |
-| tests/test_store.py | 28 | Passing |
+| tests/test_store.py | 33 | Passing |
 | tests/test_retriever.py | 25 | Passing |
 | tests/test_llm.py | 36 | Passing |
 | tests/test_cli.py | 12 | Passing |
@@ -242,7 +285,7 @@ the embedding logic lives in store.py as _embed_texts and build_embed_text.
 | tests/test_trace.py | 21 | Passing |
 
 Run all tests: pytest tests/ -v
-Total: 214 passing
+Total: 219 passing
 
 Note: test counts above are approximate. Always trust the actual
 pytest output over this table.
@@ -348,16 +391,21 @@ on the project page. For this repo, keeping **CONTEXT.md** current is enough unl
 
 Run these steps in order before every release:
 
-  npm run build --prefix frontend        # rebuild React bundle
-  cp -r frontend/dist repolix/dist        # stage bundle inside Python package
-  python -m build                        # creates dist/*.whl and dist/*.tar.gz
-  twine check dist/*                     # validate metadata before upload
-  twine upload dist/*                    # upload to PyPI (prompts for token)
+  npm run build --prefix frontend
+  rm -rf repolix/dist
+  cp -R frontend/dist repolix/dist   # rm first; cp -r into an existing dest nests dist/dist
+  python -m build
+  twine check dist/repolix-X.Y.Z*
+  twine upload dist/repolix-X.Y.Z*   # never dist/* — leftover old wheels live there
+
+Keep `repolix/__init__.py` `__version__` in lockstep with pyproject.toml.
 
 On PyPI, use an API token (not your password). Create one at
 https://pypi.org/manage/account/token/ scoped to the repolix project.
-Store it in ~/.pypirc or pass as the password when twine prompts
-(username = __token__, password = pypi-...).
+This repo stores it in `.env` as `twine=pypi-...` (gitignored).
+Twine username = `__token__`, password = that value. Never paste
+tokens into chat. If a token was pasted in a chat, revoke it and
+replace `.env`.
 
 Test on TestPyPI first: twine upload --repository testpypi dist/*
 
@@ -554,6 +602,22 @@ Demo/interview polish, not a resume headline.
 - `query --no-llm` plus `trace` already cover "context package for a
   task". A dedicated `context` command is optional later, not resume-critical.
 
+### UI (do not restyle this cycle)
+
+CLI is first-class. The SPA is a bonus: index, query, structured
+answer, citations, confidence, chunk list. Dark theme via CSS
+variables in `frontend/src/index.css`; most component styling is
+inline. No light mode, no useful mobile layout (45%/55% grid).
+
+`/tour` and `/trace` exist on FastAPI; `frontend/src/api.ts` only
+wraps `/status`, `/index`, `/query`. That is a functionality gap,
+not a CSS gap.
+
+Do not put a visual redesign or tour/trace UI into 0.3.0. If UI
+work happens, it is after 0.3.1, as its own version, functional
+first (wire tour/trace, move inline styles to CSS, one mobile
+breakpoint). Not a new palette or design system before interviews.
+
 ### Explicitly not this cycle
 
 VS Code extension, Slack bot, GitHub webhooks, multi-repo, dependency
@@ -706,3 +770,10 @@ Sequence:
   0.3.1 makes the local-first claim true.
 - Do not pass trace tree_str into a Rich Panel without
   rich.markup.escape() — `[file:line]` is parsed as markup and vanishes.
+- Do not restyle the React SPA or add tour/trace screens before 0.3.1.
+- Do not let `repolix/__init__.py` `__version__` drift from
+  pyproject.toml — bump both in the same commit.
+- Do not `twine upload dist/*` — upload only the version just built.
+- Do not `cp -r frontend/dist repolix/dist` when dest already exists —
+  that nests `repolix/dist/dist`. `rm -rf repolix/dist` first, then
+  `cp -R frontend/dist repolix/dist`.
